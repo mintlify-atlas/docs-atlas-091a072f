@@ -1,0 +1,232 @@
+---
+title: Threads API
+description: Group and track related conversations with thread management
+---
+
+The Threads API allows you to organize related LLM requests into conversations, making it easier to track multi-turn interactions and maintain context across multiple API calls.
+
+## Overview
+
+Threads provide a way to:
+- Group related requests together
+- Track conversation history
+- Filter traces by conversation
+- Analyze user journeys and agent workflows
+
+## List threads
+
+Retrieve all threads with optional filtering.
+
+### Endpoint
+
+```
+GET /api/threads
+POST /api/threads (with filters in body)
+```
+
+### Parameters
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of threads to return
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of threads to skip for pagination
+</ParamField>
+
+<ParamField query="project_id" type="string">
+  Filter threads by project ID
+</ParamField>
+
+### Response
+
+<ResponseField name="threads" type="array">
+  Array of thread objects
+  
+  <Expandable title="Thread object">
+    <ResponseField name="id" type="string">
+      Unique thread identifier
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of thread creation
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+    
+    <ResponseField name="metadata" type="object">
+      Custom metadata attached to the thread
+    </ResponseField>
+    
+    <ResponseField name="run_count" type="integer">
+      Number of runs in this thread
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash cURL
+curl http://localhost:9090/api/threads \
+  -H "Content-Type: application/json"
+```
+
+```python Python
+import requests
+
+response = requests.get('http://localhost:9090/api/threads')
+threads = response.json()
+
+for thread in threads['threads']:
+    print(f"Thread {thread['id']}: {thread['run_count']} runs")
+```
+
+## Get thread details
+
+Retrieve detailed information about a specific thread.
+
+### Endpoint
+
+```
+GET /api/threads/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Thread ID
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Thread identifier
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  Thread creation timestamp
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  Last update timestamp
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="runs" type="array">
+  Array of run objects in this thread
+</ResponseField>
+
+### Example
+
+```bash cURL
+curl http://localhost:9090/api/threads/thread_abc123
+```
+
+## Update thread
+
+Update thread metadata or properties.
+
+### Endpoint
+
+```
+PUT /api/threads/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Thread ID to update
+</ParamField>
+
+### Request Body
+
+<ParamField body="metadata" type="object">
+  Custom metadata to attach to the thread
+</ParamField>
+
+### Example
+
+```bash cURL
+curl -X PUT http://localhost:9090/api/threads/thread_abc123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "user_id": "user_123",
+      "conversation_type": "support",
+      "resolved": true
+    }
+  }'
+```
+
+## Using threads in requests
+
+Assign requests to threads using the `X-Thread-ID` header:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \
+  -H "X-Thread-ID: conversation-123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "user", "content": "Hello"}
+    ]
+  }'
+```
+
+All requests with the same thread ID will be grouped together in the UI and API.
+
+## Filtering traces by thread
+
+Use thread IDs to filter traces:
+
+```bash
+curl "http://localhost:9090/api/traces?thread_id=conversation-123"
+```
+
+This returns all traces belonging to the specified thread.
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use meaningful thread IDs">
+    Choose descriptive thread IDs that help identify conversations:
+    - `user-123-support` for support conversations
+    - `session-abc-onboarding` for onboarding flows
+    - `agent-xyz-task-456` for agent workflows
+  </Accordion>
+
+  <Accordion title="Add metadata early">
+    Attach relevant metadata to threads as soon as they're created. This makes filtering and analysis easier later.
+  </Accordion>
+
+  <Accordion title="Thread lifecycle">
+    Threads are created automatically when you first use a thread ID in a request. You don't need to explicitly create them.
+  </Accordion>
+
+  <Accordion title="Cleanup old threads">
+    Regularly archive or delete old threads to keep your database manageable. There's no automatic cleanup.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Traces API" icon="chart-line" href="/api/traces">
+    Query traces within threads
+  </Card>
+  <Card title="Runs API" icon="play" href="/api/runs">
+    View run details in threads
+  </Card>
+  <Card title="Real-time Tracing" icon="eye" href="/features/tracing">
+    Monitor thread activity in real-time
+  </Card>
+  <Card title="Projects" icon="folder" href="/concepts/projects">
+    Organize threads by project
+  </Card>
+</CardGroup>

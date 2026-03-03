@@ -78,7 +78,9 @@
               "api/projects",
               "api/traces",
               "api/runs",
-              "api/sessions"
+              "api/sessions",
+              "api/threads",
+              "api/models"
             ]
           },
           {

@@ -1,0 +1,259 @@
+---
+title: Models API
+description: List and manage available LLM models across providers
+---
+
+The Models API provides information about available LLM models from all configured providers, including capabilities, pricing, and context limits.
+
+## List models
+
+Retrieve all available models from configured providers.
+
+### Endpoint
+
+```
+GET /api/models
+```
+
+### Parameters
+
+<ParamField query="provider" type="string">
+  Filter models by provider (openai, anthropic, gemini, bedrock)
+</ParamField>
+
+<ParamField query="capability" type="string">
+  Filter by model capability (chat, embedding, image_generation)
+</ParamField>
+
+### Response
+
+<ResponseField name="models" type="array">
+  Array of model objects
+  
+  <Expandable title="Model object">
+    <ResponseField name="id" type="string">
+      Model identifier (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Human-readable model name
+    </ResponseField>
+    
+    <ResponseField name="provider" type="string">
+      Provider name (openai, anthropic, gemini, bedrock)
+    </ResponseField>
+    
+    <ResponseField name="capabilities" type="array">
+      Array of capabilities: ["chat"], ["embedding"], or ["image_generation"]
+    </ResponseField>
+    
+    <ResponseField name="context_window" type="integer">
+      Maximum context window size in tokens
+    </ResponseField>
+    
+    <ResponseField name="max_output_tokens" type="integer">
+      Maximum number of output tokens
+    </ResponseField>
+    
+    <ResponseField name="pricing" type="object">
+      Pricing information per 1M tokens
+      
+      <Expandable title="Pricing">
+        <ResponseField name="input" type="number">
+          Cost per 1M input tokens in USD
+        </ResponseField>
+        
+        <ResponseField name="output" type="number">
+          Cost per 1M output tokens in USD
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="features" type="array">
+      Supported features: ["streaming", "tools", "vision", "json_mode"]
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash cURL
+curl http://localhost:9090/api/models
+```
+
+```python Python
+import requests
+
+response = requests.get('http://localhost:9090/api/models')
+models = response.json()
+
+# List all chat models
+chat_models = [m for m in models['models'] if 'chat' in m['capabilities']]
+for model in chat_models:
+    print(f"{model['id']} - {model['provider']}")
+    print(f"  Context: {model['context_window']} tokens")
+    print(f"  Price: ${model['pricing']['input']}/1M input, ${model['pricing']['output']}/1M output")
+```
+
+## Filter by provider
+
+Get models from a specific provider:
+
+```bash
+curl "http://localhost:9090/api/models?provider=anthropic"
+```
+
+Returns only Anthropic Claude models.
+
+## Filter by capability
+
+Get models with specific capabilities:
+
+```bash
+# Chat models only
+curl "http://localhost:9090/api/models?capability=chat"
+
+# Embedding models
+curl "http://localhost:9090/api/models?capability=embedding"
+
+# Image generation models
+curl "http://localhost:9090/api/models?capability=image_generation"
+```
+
+## Using models in requests
+
+Use the model ID from the API in your requests:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+vLLora automatically routes to the correct provider based on the model ID.
+
+## Model capabilities
+
+### Chat models
+
+Models with chat capabilities support:
+- Conversational interfaces
+- Multi-turn dialogues
+- System prompts
+- Tool/function calling (if supported)
+
+**Example chat models:**
+- `gpt-4o`, `gpt-4o-mini` (OpenAI)
+- `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` (Anthropic)
+- `gemini-2.0-flash-exp`, `gemini-1.5-pro` (Google)
+- `anthropic.claude-3-5-sonnet-20241022-v2:0` (AWS Bedrock)
+
+### Embedding models
+
+Models that generate vector embeddings:
+- `text-embedding-3-small`, `text-embedding-3-large` (OpenAI)
+- `text-embedding-004` (Google)
+
+### Image generation models
+
+Models that generate images from text:
+- `dall-e-3`, `dall-e-2` (OpenAI)
+
+## Pricing information
+
+The pricing field shows costs per 1 million tokens:
+
+```json
+{
+  "id": "gpt-4o",
+  "pricing": {
+    "input": 2.50,   // $2.50 per 1M input tokens
+    "output": 10.00  // $10.00 per 1M output tokens
+  }
+}
+```
+
+Use this to estimate costs before making requests.
+
+## Context windows
+
+The `context_window` field indicates the maximum total tokens (input + output):
+
+- `gpt-4o`: 128,000 tokens
+- `claude-3-5-sonnet-20241022`: 200,000 tokens
+- `gemini-2.0-flash-exp`: 1,000,000 tokens
+
+Ensure your requests fit within the model's context window.
+
+## CLI command
+
+List models from the command line:
+
+```bash
+vllora list
+```
+
+This displays all available models in a formatted table.
+
+## Sync models
+
+Update the model database from provider APIs:
+
+```bash
+# Sync all models
+vllora sync --models
+
+# Sync specific provider
+vllora sync --models --providers
+```
+
+<Note>
+Model information is embedded in vLLora at build time for fast startup. Use `sync` to update with the latest models from provider APIs.
+</Note>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Choose the right model for your use case">
+    - Use smaller/faster models (gpt-4o-mini, claude-3-5-haiku) for simple tasks
+    - Use larger models (gpt-4o, claude-3-5-sonnet) for complex reasoning
+    - Check context window if you have long conversations
+  </Accordion>
+
+  <Accordion title="Monitor costs">
+    Check model pricing before deploying. Cost differences can be significant:
+    - gpt-4o-mini: $0.15/$0.60 per 1M tokens
+    - gpt-4o: $2.50/$10.00 per 1M tokens
+  </Accordion>
+
+  <Accordion title="Verify capabilities">
+    Not all models support all features. Check the `features` array:
+    - Tool calling support varies by model
+    - Vision capabilities are model-specific
+    - JSON mode isn't universal
+  </Accordion>
+
+  <Accordion title="Keep model data updated">
+    Run `vllora sync --models` periodically to get new models and updated pricing.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Chat Completions" icon="comments" href="/api/chat-completions">
+    Use models in chat completion requests
+  </Card>
+  <Card title="Embeddings" icon="vector-square" href="/api/embeddings">
+    Generate embeddings with embedding models
+  </Card>
+  <Card title="Image Generation" icon="image" href="/api/image-generation">
+    Create images with DALL-E models
+  </Card>
+  <Card title="Providers" icon="server" href="/concepts/providers">
+    Learn about provider support
+  </Card>
+</CardGroup>
