@@ -1,0 +1,143 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "vLLora",
+  "projectDescription": "Lightweight, real-time debugging gateway for AI agents with tracing and observability",
+  "theme": "aspen",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/gateway-architecture",
+              "concepts/real-time-tracing",
+              "concepts/providers",
+              "concepts/projects"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/tracing",
+              "features/mcp-support",
+              "features/debugging",
+              "features/routing"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/deployment",
+              "guides/configuration",
+              "guides/api-keys",
+              "guides/monitoring"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Gateway API",
+            "pages": [
+              "api/overview",
+              "api/chat-completions",
+              "api/embeddings",
+              "api/image-generation"
+            ]
+          },
+          {
+            "group": "Management API",
+            "pages": [
+              "api/projects",
+              "api/traces",
+              "api/runs",
+              "api/sessions"
+            ]
+          },
+          {
+            "group": "Rust SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/client",
+              "sdk/completions",
+              "sdk/streaming"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integration",
+        "groups": [
+          {
+            "group": "Framework Integration",
+            "pages": [
+              "integration/langchain",
+              "integration/openai-sdk",
+              "integration/anthropic-sdk",
+              "integration/google-adk"
+            ]
+          },
+          {
+            "group": "MCP Integration",
+            "pages": [
+              "integration/mcp-overview",
+              "integration/mcp-configuration",
+              "integration/mcp-servers"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/rust-streaming",
+              "examples/python-langchain",
+              "examples/typescript-openai"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time tracing and debugging",
+    "OpenAI-compatible API gateway",
+    "Model Context Protocol (MCP) support",
+    "Multi-provider routing (OpenAI, Anthropic, Gemini, Bedrock)",
+    "Self-hosted observability",
+    "Rust SDK library (vllora_llm)",
+    "Interactive UI for trace visualization",
+    "Cost tracking and usage monitoring",
+    "Breakpoint debugging for AI workflows",
+    "Guardrails and rate limiting"
+  ],
+  "publicApiSurface": [
+    "/v1/chat/completions",
+    "/v1/embeddings",
+    "/v1/images/generations",
+    "/api/traces",
+    "/api/runs",
+    "/api/projects",
+    "/api/sessions",
+    "/api/threads",
+    "/api/models",
+    "VlloraLLMClient",
+    "CompletionsClient",
+    "ResponsesClient",
+    "create_stream()",
+    "vllora CLI command"
+  ]
+}
