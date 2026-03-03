@@ -1,0 +1,361 @@
+---
+title: 'Provider Support'
+description: 'Multi-provider AI access with OpenAI, Anthropic, Gemini, and Bedrock'
+icon: 'clouds'
+---
+
+## Overview
+
+vLLora provides unified access to multiple AI providers through a single OpenAI-compatible API. Each provider is implemented as a Rust module with full support for streaming, tool calling, and advanced features.
+
+## Supported Providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="openai">
+    GPT-3.5, GPT-4, GPT-4o series with Azure OpenAI support
+  </Card>
+  <Card title="Anthropic" icon="message-bot">
+    Claude 3 Opus, Sonnet, and Haiku models
+  </Card>
+  <Card title="Google Gemini" icon="google">
+    Gemini Pro and Ultra with Vertex AI integration
+  </Card>
+  <Card title="AWS Bedrock" icon="aws">
+    Multi-model access including Claude, Llama, and Titan
+  </Card>
+</CardGroup>
+
+## Provider Architecture
+
+All providers implement a common `ModelInstance` trait defined in `llm/src/types/instance.rs`:
+
+```rust
+#[async_trait]
+pub trait ModelInstance: Send + Sync {
+    async fn execute(
+        &self,
+        messages: Vec<Message>,
+        sender: Option<Sender<ModelEvent>>,
+    ) -> LLMResult<ChatCompletionMessageWithFinishReason>;
+
+    async fn execute_stream(
+        &self,
+        messages: Vec<Message>,
+    ) -> LLMResult<Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk, ModelError>> + Send>>>;
+}
+```
+
+## OpenAI Provider
+
+### Implementation
+
+Located in `llm/src/provider/openai/mod.rs`:
+
+```rust
+pub fn openai_client(
+    credentials: Option<&ApiKeyCredentials>,
+    endpoint: Option<&str>,
+) -> Result<Client<OpenAIConfig>, ModelError> {
+    let api_key = if let Some(credentials) = credentials {
+        credentials.api_key.clone()
+    } else {
+        std::env::var("VLLORA_OPENAI_API_KEY")
+            .map_err(|_| AuthorizationError::InvalidApiKey)?
+    };
+
+    let mut config = OpenAIConfig::new();
+    config = config.with_api_key(api_key);
+
+    if let Some(endpoint) = endpoint {
+        config = config.with_api_base(endpoint);
+    }
+
+    Ok(Client::with_config(config))
+}
+```
+
+### Azure OpenAI Support
+
+vLLora automatically detects and handles Azure endpoints:
+
+```rust
+pub fn is_azure_endpoint(endpoint: &str) -> bool {
+    endpoint.contains("azure.com")
+}
+
+pub fn azure_openai_client(
+    api_key: String,
+    endpoint: &str,
+    deployment_id: &str,
+) -> Client<AzureConfig> {
+    let azure_config = AzureConfig::new()
+        .with_api_base(endpoint)
+        .with_api_version("2024-10-21".to_string())
+        .with_api_key(api_key)
+        .with_deployment_id(deployment_id.to_string());
+
+    Client::with_config(azure_config)
+}
+```
+
+<Info>
+OpenAI provider supports all standard features: streaming, function calling, vision, and JSON mode.
+</Info>
+
+## Anthropic Provider
+
+### Claude Models
+
+Implemented in `llm/src/provider/anthropic.rs` using the `clust` SDK:
+
+```rust
+pub fn anthropic_client(
+    credentials: Option<&ApiKeyCredentials>,
+) -> Result<clust::Client, ModelError> {
+    let api_key = if let Some(credentials) = credentials {
+        credentials.api_key.clone()
+    } else {
+        std::env::var("VLLORA_ANTHROPIC_API_KEY")
+            .map_err(|_| AuthorizationError::InvalidApiKey)?
+    };
+    let client = Client::from_api_key(clust::ApiKey::new(api_key));
+    Ok(client)
+}
+```
+
+### Message Conversion
+
+Anthropic's Messages API requires conversion from OpenAI format:
+
+<CodeGroup>
+```rust System Prompts
+// System messages are extracted and sent separately
+let system_prompt = messages
+    .iter()
+    .find(|m| matches!(m.message_type, MessageType::System))
+    .map(|m| SystemPrompt::new(m.content_str()));
+```
+
+```rust Tool Definitions
+fn tool_definition(tool: &dyn Tool) -> clust::messages::ToolDefinition {
+    let name = tool.name();
+    let description = Some(tool.description());
+    let input_schema = tool
+        .get_function_parameters()
+        .and_then(|a| serde_json::to_value(a).ok())
+        .unwrap_or(serde_json::json!({}));
+    clust::messages::ToolDefinition {
+        name,
+        description,
+        input_schema,
+    }
+}
+```
+</CodeGroup>
+
+### Tracing Integration
+
+Every Anthropic call is traced:
+
+```rust
+use vllora_telemetry::create_model_span;
+
+create_model_span!(
+    operation_name: "anthropic_chat_completion",
+    model: self.params.model_name.clone(),
+    provider: "anthropic",
+    // Additional attributes...
+);
+```
+
+## Google Gemini Provider
+
+### Vertex AI Integration
+
+Implemented in `llm/src/provider/gemini/`:
+
+```rust
+pub struct GeminiModel {
+    pub client: GeminiClient,
+    pub params: GeminiModelParams,
+    pub execution_options: ExecutionOptions,
+    pub tools: HashMap<String, Arc<Box<dyn Tool>>>,
+    pub credentials_ident: CredentialsIdent,
+}
+```
+
+### Multi-Modal Support
+
+Gemini provider supports text and image inputs:
+
+```rust
+// Image content handling
+ImageContentBlock {
+    image: ImageContentSource::Base64 {
+        media_type: "image/jpeg".to_string(),
+        data: base64_data,
+    }
+}
+```
+
+<Note>
+Gemini models support both direct API access and Vertex AI endpoints for enterprise customers.
+</Note>
+
+## AWS Bedrock Provider
+
+### Multi-Model Support
+
+Bedrock provides access to multiple model families:
+
+```rust
+// From llm/src/provider/bedrock/mod.rs
+pub struct BedrockModel {
+    pub client: Client,
+    pub execution_options: ExecutionOptions,
+    params: BedrockModelParams,
+    pub tools: HashMap<String, Arc<Box<dyn VlloraTool>>>,
+    pub model_name: String,
+    pub credentials_ident: CredentialsIdent,
+}
+```
+
+### AWS Credentials
+
+Bedrock supports multiple authentication methods:
+
+<Tabs>
+  <Tab title="IAM Credentials">
+    ```rust
+    BedrockCredentials::IAM(IAMCredentials {
+        access_key_id: "...".to_string(),
+        secret_access_key: "...".to_string(),
+        region: Some("us-east-1".to_string()),
+        session_token: None,
+    })
+    ```
+  </Tab>
+  <Tab title="AWS Profile">
+    ```rust
+    pub async fn get_sdk_config(
+        credentials: Option<&BedrockCredentials>,
+    ) -> Result<SdkConfig, ModelError> {
+        Ok(match credentials {
+            Some(BedrockCredentials::IAM(creds)) => {
+                get_user_shared_config(creds.clone()).await.load().await
+            }
+            None => {
+                get_shared_config().await.load().await
+            }
+        })
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Converse API
+
+Bedrock uses the unified Converse API:
+
+```rust
+use aws_sdk_bedrockruntime::types::{
+    ContentBlock, ConversationRole, Message,
+    InferenceConfiguration, ToolConfiguration
+};
+
+let response = client
+    .converse()
+    .model_id(model_name)
+    .messages(message)
+    .set_system(system_prompts)
+    .set_tool_config(tool_config)
+    .send()
+    .await?;
+```
+
+## Provider Selection
+
+vLLora determines which provider to use based on:
+
+1. **Model Name Pattern**: `gpt-4` → OpenAI, `claude-3` → Anthropic, etc.
+2. **Explicit Provider**: Specified in routing configuration
+3. **Endpoint URL**: Azure endpoints automatically route to Azure OpenAI
+
+### Provider Enum
+
+From `llm/src/types/provider.rs`:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum InferenceModelProvider {
+    OpenAI,
+    Anthropic,
+    Gemini,
+    Bedrock,
+    #[serde(alias = "vertex-ai")]
+    VertexAI,
+    Proxy(String),
+}
+```
+
+## Credential Management
+
+### Per-Project Credentials
+
+Each project can have its own credentials for each provider:
+
+```rust
+// From core/src/metadata/services/provider_credential.rs
+pub struct ProviderCredential {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub provider_id: Uuid,
+    pub credentials: EncryptedCredentials,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+```
+
+### Credential Resolution
+
+The `ProviderKeyResolver` retrieves the appropriate credentials:
+
+```rust
+pub trait ProviderKeyResolver {
+    fn resolve_key(
+        &self,
+        project_id: Uuid,
+        provider: InferenceModelProvider,
+    ) -> Result<Option<Credentials>, CredentialError>;
+}
+```
+
+## Model Pricing
+
+vLLora includes pricing information for accurate cost tracking:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CompletionModelPrice {
+    pub per_input_token: f64,
+    pub per_output_token: f64,
+    pub per_cached_input_token: Option<f64>,
+    pub per_cached_input_write_token: Option<f64>,
+    pub valid_from: Option<NaiveDate>,
+}
+```
+
+<Tip>
+Pricing data is embedded in `gateway/models_data.json` for fast startup and offline operation.
+</Tip>
+
+## Adding Custom Providers
+
+vLLora supports custom provider proxies:
+
+```rust
+InferenceModelProvider::Proxy("my-custom-provider".to_string())
+```
+
+Custom providers can implement OpenAI-compatible endpoints and will be routed through the proxy system.

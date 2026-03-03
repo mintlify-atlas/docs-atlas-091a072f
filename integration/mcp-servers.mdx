@@ -1,0 +1,503 @@
+---
+title: Available MCP Servers
+description: Explore popular MCP servers and learn how to integrate them with vLLora
+---
+
+## Built-in vLLora MCP Server
+
+vLLora includes a built-in MCP server that provides debugging and observability tools for your LLM applications.
+
+### Available Tools
+
+#### search_traces
+
+Search and filter traces from your vLLora telemetry data.
+
+```json
+{
+  "tool": "search_traces",
+  "parameters": {
+    "time_range": {
+      "last_n_minutes": 60
+    },
+    "filters": {
+      "operation_name": "openai",
+      "status": "error"
+    },
+    "include": {
+      "metrics": true,
+      "tokens": true,
+      "costs": true
+    }
+  }
+}
+```
+
+**Use cases:**
+- Find failed LLM calls
+- Track token usage
+- Monitor costs
+- Debug specific runs or threads
+
+#### get_llm_call
+
+Get detailed information about a specific LLM call.
+
+```json
+{
+  "tool": "get_llm_call",
+  "parameters": {
+    "span_id": "12345",
+    "allow_unsafe_text": true,
+    "include": {
+      "llm_payload": true,
+      "unsafe_text": true,
+      "raw_request": true,
+      "raw_response": true
+    }
+  }
+}
+```
+
+**Response includes:**
+- Request messages and tools
+- Response content
+- Token usage
+- Cost breakdown
+- Provider and model info
+
+#### get_run_overview
+
+Get a high-level overview of an agent run with all spans.
+
+```json
+{
+  "tool": "get_run_overview",
+  "parameters": {
+    "run_id": "run_abc123"
+  }
+}
+```
+
+**Response includes:**
+- Run status and duration
+- Span tree (all operations)
+- LLM summaries (calls, models, tokens)
+- Tool summaries (executions, status)
+- Error breadcrumbs
+- Total cost and usage
+
+#### get_recent_stats
+
+Get aggregated statistics for recent LLM and tool activity.
+
+```json
+{
+  "tool": "get_recent_stats",
+  "parameters": {
+    "last_n_minutes": 30
+  }
+}
+```
+
+**Response includes:**
+- LLM calls by model (success/error counts)
+- Tool calls by name (success/error counts)
+- Time window information
+
+### Available Prompts
+
+The vLLora MCP server includes pre-built prompts for common debugging tasks:
+
+- **debug_errors**: Guide for debugging errors in LLM traces and runs
+- **analyze_performance**: Guide for analyzing performance issues
+- **understand_run_flow**: Guide for understanding agent run flows
+- **search_traces_guide**: Best practices for searching traces
+- **monitor_system_health**: Guide for monitoring LLM system health
+- **analyze_costs**: Guide for analyzing costs and token usage
+
+### Configuration
+
+The vLLora MCP server is exposed via HTTP at:
+
+```
+POST /mcp/message
+GET /mcp/sse
+```
+
+To connect from another MCP client:
+
+```json
+{
+  "type": "sse",
+  "server_url": "http://localhost:8080/mcp/sse"
+}
+```
+
+## External MCP Servers
+
+### DeepWiki
+
+Web search and knowledge retrieval powered by DeepWiki.
+
+**Public Server**
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.deepwiki.com/sse",
+  "filter": "all"
+}
+```
+
+**Private Server (with authentication)**
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.devin.ai/sse",
+  "headers": {
+    "Authorization": "Bearer YOUR_API_KEY"
+  }
+}
+```
+
+**HTTP Endpoint**
+
+```json
+{
+  "type": "http",
+  "server_url": "https://mcp.deepwiki.com/mcp"
+}
+```
+
+**Available Tools:**
+- `search_web`: Search the web for information
+- `get_page`: Retrieve a specific web page
+- `summarize`: Summarize web content
+
+### Tavily Search
+
+Powerful web search API optimized for LLMs.
+
+```json
+{
+  "type": "sse",
+  "server_url": "http://localhost:8083/sse",
+  "env": {
+    "TAVILY_API_KEY": "tvly-..."
+  },
+  "filter": {
+    "selected": [
+      { "name": "search" },
+      { "name": "extract" }
+    ]
+  }
+}
+```
+
+**Available Tools:**
+- `search`: Search the web with LLM-optimized results
+- `extract`: Extract specific information from web pages
+
+### File System MCP
+
+Access local file system operations.
+
+```json
+{
+  "type": "http",
+  "server_url": "http://localhost:8084/mcp",
+  "filter": {
+    "selected": [
+      { "name": "read_file" },
+      { "name": "write_file" },
+      { "name": "list_directory" }
+    ]
+  }
+}
+```
+
+**Available Tools:**
+- `read_file`: Read file contents
+- `write_file`: Write to a file
+- `list_directory`: List directory contents
+- `search_files`: Search for files matching patterns
+
+## Configuration Examples
+
+### Single Server Setup
+
+Simple configuration with one MCP server:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "type": "sse",
+      "server_url": "https://mcp.deepwiki.com/sse",
+      "filter": "all"
+    }
+  ]
+}
+```
+
+### Multi-Server Setup
+
+Combine multiple MCP servers for different capabilities:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "type": "sse",
+      "server_url": "https://mcp.deepwiki.com/sse",
+      "filter": {
+        "selected": [
+          { "name": "search_web" }
+        ]
+      }
+    },
+    {
+      "type": "http",
+      "server_url": "http://localhost:8084/mcp",
+      "filter": {
+        "selected": [
+          { "name": "read_file" },
+          { "name": "write_file" }
+        ]
+      }
+    },
+    {
+      "type": "in-memory",
+      "name": "websearch"
+    }
+  ]
+}
+```
+
+### Production Setup with Authentication
+
+Secure configuration for production environments:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "type": "sse",
+      "server_url": "https://mcp.devin.ai/sse",
+      "headers": {
+        "Authorization": "Bearer ${DEVIN_API_KEY}",
+        "X-Client-ID": "${CLIENT_ID}"
+      },
+      "filter": {
+        "selected": [
+          {
+            "name": "search_web",
+            "description": "Search the web for current information. Use this for fact-checking and research."
+          }
+        ]
+      }
+    },
+    {
+      "type": "http",
+      "server_url": "https://api.example.com/mcp",
+      "headers": {
+        "X-API-Key": "${EXAMPLE_API_KEY}"
+      },
+      "env": {
+        "REGION": "us-west-2",
+        "LOG_LEVEL": "info"
+      },
+      "filter": {
+        "selected": [
+          { "name": "query_database" },
+          { "name": "update_record" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Tool Execution
+
+### Rust Client
+
+```rust
+use vllora_llm::mcp::{get_tools, execute_mcp_tool};
+use vllora_llm::types::gateway::{McpDefinition, McpTransportType, ToolsFilter};
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure MCP server
+    let definition = McpDefinition {
+        filter: ToolsFilter::All,
+        r#type: McpTransportType::Sse {
+            server_url: "https://mcp.deepwiki.com/sse".to_string(),
+            headers: HashMap::new(),
+            env: None,
+        },
+    };
+
+    // Get available tools
+    let server_tools = get_tools(&vec![definition.clone()]).await?;
+    
+    // Find the search tool
+    let search_tool = server_tools[0]
+        .tools
+        .iter()
+        .find(|t| t.0.name == "search_web")
+        .ok_or("Tool not found")?;
+
+    // Execute the tool
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "query".to_string(),
+        serde_json::json!("Latest developments in Rust async")
+    );
+
+    let result = execute_mcp_tool(
+        &definition,
+        &search_tool.0,
+        inputs,
+        None,
+    ).await?;
+
+    println!("Search result: {}", result);
+    Ok(())
+}
+```
+
+### Testing MCP Servers
+
+Test MCP server connectivity and tool discovery:
+
+```rust
+use vllora_llm::mcp::get_raw_tools;
+use vllora_llm::types::gateway::{McpDefinition, McpTransportType};
+
+#[tokio::test]
+async fn test_mcp_connection() {
+    let definition = McpDefinition {
+        filter: ToolsFilter::All,
+        r#type: McpTransportType::Http {
+            server_url: "https://mcp.deepwiki.com/mcp".to_string(),
+            headers: HashMap::new(),
+            env: None,
+        },
+    };
+
+    let tools = get_raw_tools(&definition).await.unwrap();
+    assert!(!tools.is_empty(), "Server should return tools");
+    
+    for tool in tools {
+        println!("Tool: {} - {}", tool.name, tool.description.unwrap_or_default());
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use tool filtering for focused capabilities">
+    Instead of loading all tools, filter to only the ones your application needs. This reduces overhead and makes debugging easier.
+    
+    ```json
+    {
+      "filter": {
+        "selected": [
+          { "name": "search_web" },
+          { "name": "get_weather" }
+        ]
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Provide custom tool descriptions">
+    Override tool descriptions to give your LLM better context about when and how to use each tool:
+    
+    ```json
+    {
+      "filter": {
+        "selected": [
+          {
+            "name": "search_web",
+            "description": "Search the web for current information. Use this when the user asks about recent events, current news, or needs up-to-date facts."
+          }
+        ]
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use SSE for better streaming performance">
+    SSE provides better performance for operations that stream results. Use HTTP only for simple request/response patterns.
+  </Accordion>
+  
+  <Accordion title="Monitor tool execution costs">
+    Use the built-in vLLora MCP server to monitor tool execution costs and performance:
+    
+    ```rust
+    let stats = execute_tool("get_recent_stats", {
+        "last_n_minutes": 60
+    }).await?;
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle errors gracefully">
+    MCP tool execution can fail for various reasons. Always handle errors and provide fallback behavior:
+    
+    ```rust
+    match execute_mcp_tool(&def, &tool, inputs, None).await {
+        Ok(result) => println!("Success: {}", result),
+        Err(e) => {
+            eprintln!("Tool execution failed: {}", e);
+            // Provide fallback or alternative approach
+        }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Connection Errors
+
+If you encounter connection errors:
+
+1. Verify the server URL is correct and accessible
+2. Check that the transport type matches the server endpoint
+3. Ensure authentication headers are valid
+4. Check network connectivity and firewall rules
+
+### Tool Not Found
+
+If a tool is not available:
+
+1. List all available tools using `get_raw_tools`
+2. Check your filter configuration
+3. Verify the server supports the tool
+4. Check for typos in tool names
+
+### Authentication Failures
+
+If authentication fails:
+
+1. Verify API keys are correct and not expired
+2. Check header names match server expectations
+3. Ensure headers are properly formatted
+4. Check server documentation for authentication requirements
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Overview" icon="book" href="/integration/mcp-overview">
+    Learn about MCP architecture and concepts
+  </Card>
+  <Card title="MCP Configuration" icon="gear" href="/integration/mcp-configuration">
+    Deep dive into MCP configuration options
+  </Card>
+</CardGroup>

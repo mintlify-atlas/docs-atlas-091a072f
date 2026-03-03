@@ -1,0 +1,251 @@
+---
+title: Runs
+description: Track and analyze LLM execution runs
+---
+
+Runs represent complete execution cycles of your AI workflows, aggregating usage metrics, costs, and performance data across all operations.
+
+## List Root Runs
+
+Retrieve root runs (top-level executions) with optional filtering.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:3002/runs?limit=50&offset=0" \
+  -H "x-project-slug: default"
+```
+
+```python Python
+import requests
+
+headers = {"x-project-slug": "default"}
+params = {
+    "limit": 50,
+    "offset": 0,
+    "modelName": "gpt-4",
+    "typeFilter": "llm"
+}
+
+response = requests.get(
+    "http://localhost:3002/runs",
+    headers=headers,
+    params=params
+)
+data = response.json()
+```
+</CodeGroup>
+
+<ParamField query="runIds" type="string">
+  Comma-separated list of run IDs to filter by
+</ParamField>
+
+<ParamField query="threadIds" type="string">
+  Comma-separated list of thread IDs to filter by
+</ParamField>
+
+<ParamField query="traceIds" type="string">
+  Comma-separated list of trace IDs to filter by
+</ParamField>
+
+<ParamField query="modelName" type="string">
+  Filter by model name (e.g., "gpt-4", "claude-3-opus")
+</ParamField>
+
+<ParamField query="typeFilter" type="string">
+  Filter by run type. Available types depend on your implementation.
+</ParamField>
+
+<ParamField query="startTimeMin" type="integer">
+  Minimum start time in microseconds (Unix timestamp)
+</ParamField>
+
+<ParamField query="startTimeMax" type="integer">
+  Maximum start time in microseconds (Unix timestamp)
+</ParamField>
+
+<ParamField query="labels" type="string">
+  Comma-separated list of labels to filter by
+</ParamField>
+
+<ParamField query="includeMcpTemplates" type="boolean" default="false">
+  Include MCP template information in the response
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Number of runs to return
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of runs to skip for pagination
+</ParamField>
+
+<ResponseField name="data" type="array">
+  Array of run objects with usage information
+  
+  <Expandable title="Run Object">
+    <ResponseField name="run_id" type="string" required>
+      Unique run identifier
+    </ResponseField>
+    
+    <ResponseField name="thread_ids" type="array">
+      Array of associated thread IDs
+    </ResponseField>
+    
+    <ResponseField name="trace_ids" type="array">
+      Array of associated trace IDs
+    </ResponseField>
+    
+    <ResponseField name="root_span_ids" type="array">
+      Array of root span IDs for this run
+    </ResponseField>
+    
+    <ResponseField name="request_models" type="array">
+      Models requested in this run
+    </ResponseField>
+    
+    <ResponseField name="used_models" type="array">
+      Models actually used in this run
+    </ResponseField>
+    
+    <ResponseField name="used_tools" type="array">
+      Tools/functions called during this run
+    </ResponseField>
+    
+    <ResponseField name="mcp_template_definition_ids" type="array">
+      MCP template definition IDs used
+    </ResponseField>
+    
+    <ResponseField name="llm_calls" type="integer" required>
+      Total number of LLM API calls made
+    </ResponseField>
+    
+    <ResponseField name="cost" type="float" required>
+      Total cost in USD for this run
+    </ResponseField>
+    
+    <ResponseField name="input_tokens" type="integer">
+      Total input tokens consumed
+    </ResponseField>
+    
+    <ResponseField name="output_tokens" type="integer">
+      Total output tokens generated
+    </ResponseField>
+    
+    <ResponseField name="start_time_us" type="integer" required>
+      Run start time in microseconds
+    </ResponseField>
+    
+    <ResponseField name="finish_time_us" type="integer" required>
+      Run finish time in microseconds
+    </ResponseField>
+    
+    <ResponseField name="errors" type="array">
+      Array of errors encountered during the run
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata
+  
+  <Expandable title="Pagination">
+    <ResponseField name="offset" type="integer">
+      Current offset
+    </ResponseField>
+    
+    <ResponseField name="limit" type="integer">
+      Current limit
+    </ResponseField>
+    
+    <ResponseField name="total" type="integer">
+      Total number of runs matching the query
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Run Details
+
+Retrieve detailed information about a specific run.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:3002/runs/{run_id}/details" \
+  -H "x-project-slug: default"
+```
+
+```python Python
+import requests
+
+run_id = "run_abc123"
+headers = {"x-project-slug": "default"}
+
+response = requests.get(
+    f"http://localhost:3002/runs/{run_id}/details",
+    headers=headers
+)
+run_details = response.json()
+```
+</CodeGroup>
+
+<ParamField path="run_id" type="string" required>
+  The run ID to retrieve
+</ParamField>
+
+<ResponseField name="run" type="object">
+  The run object (see List Root Runs for structure)
+</ResponseField>
+
+## Usage Metrics
+
+Runs provide comprehensive usage metrics:
+
+### Token Usage
+- **input_tokens** - Total tokens sent to LLM APIs
+- **output_tokens** - Total tokens received from LLM APIs
+
+### Cost Tracking
+- **cost** - Total cost calculated based on model pricing
+- Includes both input and output token costs
+- Supports custom model pricing via project settings
+
+### Performance Metrics
+- **llm_calls** - Number of LLM API invocations
+- **start_time_us** / **finish_time_us** - Execution duration
+- **errors** - Any errors encountered during execution
+
+## Filtering Examples
+
+### Filter by Model
+
+```bash
+curl -X GET "http://localhost:3002/runs?modelName=gpt-4o-mini&limit=20" \
+  -H "x-project-slug: default"
+```
+
+### Filter by Time Range and Labels
+
+```bash
+curl -X GET "http://localhost:3002/runs?startTimeMin=1709481600000000&labels=production" \
+  -H "x-project-slug: default"
+```
+
+### Get Runs for Specific Threads
+
+```bash
+curl -X GET "http://localhost:3002/runs?threadIds=thread_1,thread_2" \
+  -H "x-project-slug: default"
+```
+
+## Run Lifecycle
+
+1. **Creation** - Run starts when a root span with a run_id is created
+2. **Execution** - Spans are added as operations execute (LLM calls, tool executions, etc.)
+3. **Completion** - Run finishes when all spans complete
+4. **Aggregation** - Metrics are aggregated across all spans in the run
+
+Runs automatically track:
+- All models used
+- All tools called
+- Total token consumption
+- Cumulative costs
+- Error states

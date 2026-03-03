@@ -1,0 +1,133 @@
+---
+title: 'Rust Streaming Example'
+description: 'Learn how to use vLLora with streaming responses in Rust'
+---
+
+# Rust Streaming Example
+
+This example demonstrates how to use vLLora's Rust SDK to make both streaming and non-streaming chat completion requests.
+
+## Prerequisites
+
+Add vLLora to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vllora_llm = "0.1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+```
+
+## Basic Streaming Example
+
+Here's a complete example showing both non-streaming and streaming chat completions:
+
+```rust
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use tokio_stream::StreamExt;
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    // 1) Build an OpenAI-style request using async-openai-compatible types
+    let openai_req = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([
+            ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a helpful assistant.")
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Stream numbers 1 to 20 in separate lines.")
+                    .build()?,
+            ),
+        ])
+        .build()?;
+
+    // 2) Construct a VlloraLLMClient
+    let client = VlloraLLMClient::new();
+
+    // 3) Non-streaming: send the request and print the final reply
+    let response = client
+        .completions()
+        .create(openai_req.clone())
+        .await?;
+
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Non-streaming reply:");
+            println!("{text}");
+        }
+    }
+
+    // 4) Streaming: send the same request and print chunks as they arrive
+    let mut stream = client
+        .completions()
+        .create_stream(openai_req)
+        .await?;
+
+    println!("Streaming response...");    
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        for choice in chunk.choices {
+            if let Some(delta) = choice.delta.content {
+                print!("{delta}");
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Using Different Providers
+
+You can configure vLLora to use different AI providers like Anthropic:
+
+```rust
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
+use vllora_llm::types::provider::InferenceModelProvider;
+
+let client = VlloraLLMClient::new()
+    .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+        api_key: std::env::var("VLLORA_ANTHROPIC_API_KEY")
+            .expect("VLLORA_ANTHROPIC_API_KEY must be set"),
+    }))
+    .with_model_provider(InferenceModelProvider::Anthropic);
+```
+
+## Key Features
+
+- **Unified API**: Use OpenAI-compatible types across all providers
+- **Streaming Support**: Get real-time responses with `create_stream()`
+- **Error Handling**: Comprehensive error types with `LLMResult`
+- **Provider Flexibility**: Switch between OpenAI, Anthropic, and other providers
+
+## Running the Example
+
+Set your API credentials:
+
+```bash
+export VLLORA_API_KEY="your-api-key"
+```
+
+Run the example:
+
+```bash
+cargo run --example openai
+```
+
+## Next Steps
+
+- Explore the [Responses API](/examples/responses) for structured outputs
+- Learn about [provider configuration](/api-reference/providers)
+- Check out [authentication options](/api-reference/authentication)

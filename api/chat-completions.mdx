@@ -1,0 +1,335 @@
+---
+title: Chat Completions
+description: POST /v1/chat/completions - Generate conversational responses with streaming support
+---
+
+Create chat completions with support for streaming, function calling, and multi-turn conversations.
+
+## Endpoint
+
+```
+POST /v1/chat/completions
+```
+
+## Request Body
+
+<ParamField body="model" type="string" required>
+  The model to use for completion. Can be:
+  - Model name: `gpt-4`
+  - Provider/model: `openai/gpt-4`
+  - Provider/model@version: `openai/gpt-4@latest`
+</ParamField>
+
+<ParamField body="messages" type="array" required>
+  Array of message objects that make up the conversation history.
+  
+  Each message contains:
+  - `role` (string): One of `system`, `user`, `assistant`, or `tool`
+  - `content` (string | array): The message content
+  - `name` (string, optional): The name of the message author
+  - `tool_calls` (array, optional): Tool calls made by the assistant
+</ParamField>
+
+<ParamField body="temperature" type="number">
+  Controls randomness. Range: 0.0 to 2.0. Higher values make output more random.
+  Default: 1.0
+</ParamField>
+
+<ParamField body="top_p" type="number">
+  Nucleus sampling parameter. Range: 0.0 to 1.0.
+  Default: 1.0
+</ParamField>
+
+<ParamField body="n" type="integer">
+  Number of completions to generate.
+  Default: 1
+</ParamField>
+
+<ParamField body="stream" type="boolean">
+  Whether to stream the response using Server-Sent Events (SSE).
+  Default: false
+</ParamField>
+
+<ParamField body="stop" type="array">
+  Array of strings where the API will stop generating further tokens.
+</ParamField>
+
+<ParamField body="max_tokens" type="integer">
+  Maximum number of tokens to generate in the completion.
+</ParamField>
+
+<ParamField body="presence_penalty" type="number">
+  Penalty for tokens based on presence in the text so far. Range: -2.0 to 2.0.
+  Default: 0
+</ParamField>
+
+<ParamField body="frequency_penalty" type="number">
+  Penalty for tokens based on frequency in the text so far. Range: -2.0 to 2.0.
+  Default: 0
+</ParamField>
+
+<ParamField body="logit_bias" type="object">
+  Map of token IDs to bias values (-100 to 100) to modify likelihood of specific tokens.
+</ParamField>
+
+<ParamField body="user" type="string">
+  Unique identifier for the end-user, useful for monitoring and abuse detection.
+</ParamField>
+
+<ParamField body="response_format" type="object">
+  Format for the response. Use `{"type": "json_object"}` for JSON mode.
+</ParamField>
+
+<ParamField body="seed" type="integer">
+  Seed for deterministic sampling (when supported by the model).
+</ParamField>
+
+<ParamField body="tools" type="array">
+  Array of tool/function definitions available to the model.
+  
+  Each tool contains:
+  - `type` (string): Always `"function"`
+  - `function` (object): Function definition with `name`, `description`, and `parameters`
+</ParamField>
+
+<ParamField body="tool_choice" type="string | object">
+  Controls which tools the model uses:
+  - `"none"`: Don't call any tools
+  - `"auto"`: Let the model decide
+  - `"required"`: Force tool usage
+  - Object: Force specific tool
+</ParamField>
+
+<ParamField body="stream_options" type="object">
+  Options for streaming responses.
+  
+  - `include_usage` (boolean): Include token usage in stream
+</ParamField>
+
+### vLLora-Specific Extensions
+
+<ParamField body="router" type="object">
+  Dynamic routing configuration for load balancing and failover.
+  
+  - `strategy` (object): Routing strategy configuration
+  - `targets` (array): Array of target providers/models
+  - `name` (string): Router configuration name
+</ParamField>
+
+<ParamField body="max_retries" type="integer">
+  Maximum number of retry attempts on failure.
+  Default: 0
+</ParamField>
+
+<ParamField body="fallbacks" type="array">
+  Array of fallback models to try if the primary model fails.
+</ParamField>
+
+<ParamField body="mcp_servers" type="array">
+  Model Context Protocol (MCP) server configurations for extended tool capabilities.
+</ParamField>
+
+<ParamField body="extra" type="object">
+  Extra metadata for request tracking and monitoring.
+  
+  - `user` (object): User information for tracking
+    - `id` (string): User ID
+    - `name` (string): User name  
+    - `email` (string): User email
+    - `tiers` (array): User tier/tags
+</ParamField>
+
+<ParamField body="thinking" type="object">
+  Anthropic-specific thinking/reasoning configuration.
+</ParamField>
+
+<ParamField body="top_k" type="integer">
+  Anthropic-specific top-k sampling parameter.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the completion.
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Object type: `"chat.completion"` or `"chat.completion.chunk"` for streaming.
+</ResponseField>
+
+<ResponseField name="created" type="integer">
+  Unix timestamp of when the completion was created.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model used for the completion.
+</ResponseField>
+
+<ResponseField name="choices" type="array">
+  Array of completion choices.
+  
+  Each choice contains:
+  - `index` (integer): Choice index
+  - `message` (object): The generated message
+    - `role` (string): Always `"assistant"`
+    - `content` (string): The message content
+    - `tool_calls` (array, optional): Tool calls made
+  - `finish_reason` (string): Why generation stopped: `"stop"`, `"length"`, `"tool_calls"`, etc.
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token usage statistics.
+  
+  - `prompt_tokens` (integer): Tokens in the prompt
+  - `completion_tokens` (integer): Tokens in the completion
+  - `total_tokens` (integer): Total tokens used
+</ResponseField>
+
+## Examples
+
+### Basic Chat Completion
+
+```bash
+curl -X POST https://your-gateway-url/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "What is the capital of France?"
+      }
+    ]
+  }'
+```
+
+### Streaming Response
+
+```bash
+curl -X POST https://your-gateway-url/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a short poem about AI."
+      }
+    ],
+    "stream": true
+  }'
+```
+
+### Function Calling
+
+```bash
+curl -X POST https://your-gateway-url/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the weather in San Francisco?"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get the current weather in a location",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "The city and state, e.g. San Francisco, CA"
+              }
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ]
+  }'
+```
+
+### Multi-Provider Routing
+
+```bash
+curl -X POST https://your-gateway-url/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain quantum computing."
+      }
+    ],
+    "router": {
+      "strategy": {
+        "type": "weighted"
+      },
+      "targets": [
+        {"provider": "openai", "weight": 0.7},
+        {"provider": "anthropic", "weight": 0.3}
+      ]
+    },
+    "fallbacks": ["anthropic/claude-3-opus", "gpt-3.5-turbo"]
+  }'
+```
+
+### With Custom Headers
+
+```bash
+curl -X POST https://your-gateway-url/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "X-Thread-Id: thread_abc123" \
+  -H "X-Thread-Title: Customer Support Chat" \
+  -H "X-Tags: environment=production&team=support" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I need help with my account."
+      }
+    ],
+    "extra": {
+      "user": {
+        "id": "user_123",
+        "email": "user@example.com",
+        "tiers": ["premium"]
+      }
+    }
+  }'
+```
+
+## Response Headers
+
+The Gateway adds custom headers to track model routing:
+
+- `X-Model-Name`: The actual model that processed the request
+- `X-Provider-Name`: The provider that served the request
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Learn about the Gateway API
+  </Card>
+  <Card title="Embeddings" icon="vector-square" href="/api/embeddings">
+    Generate text embeddings
+  </Card>
+</CardGroup>

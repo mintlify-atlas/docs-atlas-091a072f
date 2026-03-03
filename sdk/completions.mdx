@@ -1,0 +1,352 @@
+---
+title: 'Completions API'
+description: 'Send chat completion requests using CompletionsClient'
+---
+
+The `CompletionsClient` provides methods for sending chat completion requests to LLM providers.
+
+## Getting a CompletionsClient
+
+Obtain a `CompletionsClient` from a `VlloraLLMClient`:
+
+```rust
+use vllora_llm::client::VlloraLLMClient;
+
+let client = VlloraLLMClient::new();
+let completions = client.completions();
+```
+
+## Sending Requests
+
+### Basic Completion
+
+The `create()` method sends a completion request and waits for the full response:
+
+```rust
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content("Explain Rust ownership in one sentence.")
+                .build()?,
+        )])
+        .build()?;
+
+    let client = VlloraLLMClient::new();
+    let response = client.completions().create(request).await?;
+
+    // Access the response
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Response: {}", text);
+        }
+    }
+
+    Ok(())
+}
+```
+
+### Request Types
+
+The SDK accepts requests in multiple formats:
+
+<Tabs>
+  <Tab title="OpenAI Format">
+```rust
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+
+let request = CreateChatCompletionRequestArgs::default()
+    .model("gpt-4.1-mini")
+    .messages([
+        ChatCompletionRequestMessage::System(
+            ChatCompletionRequestSystemMessageArgs::default()
+                .content("You are a helpful assistant.")
+                .build()?,
+        ),
+        ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content("Hello!")
+                .build()?,
+        ),
+    ])
+    .temperature(0.7)
+    .max_tokens(1000)
+    .build()?;
+```
+  </Tab>
+  <Tab title="Gateway Format">
+```rust
+use vllora_llm::types::gateway::{
+    ChatCompletionRequest,
+    ChatCompletionMessage,
+    ChatCompletionContent,
+};
+
+let request = ChatCompletionRequest {
+    model: "gpt-4.1-mini".to_string(),
+    messages: vec![
+        ChatCompletionMessage {
+            role: "user".to_string(),
+            content: Some(ChatCompletionContent::Text(
+                "Hello!".to_string()
+            )),
+            ..Default::default()
+        },
+    ],
+    temperature: Some(0.7),
+    ..Default::default()
+};
+```
+  </Tab>
+</Tabs>
+
+## Response Handling
+
+### Response Type
+
+The `create()` method returns `ChatCompletionMessageWithFinishReason`:
+
+```rust
+let response = client.completions().create(request).await?;
+
+// Access the message
+let message = response.message();
+
+// Get text content
+if let Some(content) = &message.content {
+    if let Some(text) = content.as_string() {
+        println!("Text: {}", text);
+    }
+}
+
+// Check finish reason
+let finish_reason = response.finish_reason();
+println!("Finished: {:?}", finish_reason);
+```
+
+### Content Types
+
+Messages can contain different content types:
+
+```rust
+use vllora_llm::types::gateway::{
+    ChatCompletionContent,
+    Content,
+    ContentType,
+};
+
+match &message.content {
+    Some(ChatCompletionContent::Text(text)) => {
+        println!("Text: {}", text);
+    }
+    Some(ChatCompletionContent::Content(parts)) => {
+        for part in parts {
+            match part.r#type {
+                ContentType::Text => {
+                    if let Some(text) = &part.text {
+                        println!("Text: {}", text);
+                    }
+                }
+                ContentType::ImageUrl => {
+                    if let Some(url) = &part.image_url {
+                        println!("Image: {}", url.url);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None => {}
+}
+```
+
+## Advanced Configuration
+
+### Input Variables
+
+Pass variables for template substitution:
+
+```rust
+use std::collections::HashMap;
+use serde_json::Value;
+
+let mut variables = HashMap::new();
+variables.insert("user_name".to_string(), Value::String("Alice".to_string()));
+
+let response = client
+    .completions()
+    .with_input_variables(variables)
+    .create(request)
+    .await?;
+```
+
+### Tags
+
+Add metadata tags for tracing:
+
+```rust
+use std::collections::HashMap;
+
+let mut tags = HashMap::new();
+tags.insert("session_id".to_string(), "abc123".to_string());
+tags.insert("user_id".to_string(), "user_456".to_string());
+
+let response = client
+    .completions()
+    .with_tags(tags)
+    .create(request)
+    .await?;
+```
+
+### Event Channel
+
+Receive model events during execution:
+
+```rust
+use vllora_llm::types::ModelEvent;
+use tokio::sync::mpsc;
+
+let (tx, mut rx) = mpsc::channel::<Option<ModelEvent>>(100);
+
+// Spawn a task to handle events
+tokio::spawn(async move {
+    while let Some(event) = rx.recv().await {
+        if let Some(e) = event {
+            println!("Event: {:?}", e);
+        }
+    }
+});
+
+let response = client
+    .completions()
+    .with_tx(tx)
+    .create(request)
+    .await?;
+```
+
+## Complete Example
+
+From `llm/examples/openai/src/main.rs`:
+
+```rust llm/examples/openai/src/main.rs
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    // Build request
+    let openai_req = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([
+            ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a helpful assistant.")
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Explain Rust ownership in one sentence.")
+                    .build()?,
+            ),
+        ])
+        .build()?;
+
+    // Create client
+    let client = VlloraLLMClient::new();
+
+    // Send request
+    let response = client
+        .completions()
+        .create(openai_req)
+        .await?;
+
+    // Print response
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Response: {}", text);
+        }
+    }
+
+    Ok(())
+}
+```
+
+## CompletionsClient API Reference
+
+Defined in `llm/src/client/completions/mod.rs`:
+
+### Constructor
+
+```rust
+pub fn new(builder: CompletionEngineParamsBuilder) -> Self
+```
+
+### Configuration Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `with_instance` | `(self, instance: Box<dyn ModelInstance>) -> Self` | Use a custom model instance |
+| `with_input_variables` | `(self, variables: HashMap<String, Value>) -> Self` | Set template variables |
+| `with_tx` | `(self, tx: Sender<Option<ModelEvent>>) -> Self` | Set event channel |
+| `with_tags` | `(self, tags: HashMap<String, String>) -> Self` | Set metadata tags |
+
+### Request Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `create` | `async (request: impl Into<ChatCompletionRequest>) -> LLMResult<ChatCompletionMessageWithFinishReason>` | Send a completion request |
+| `create_stream` | `async (request: impl Into<ChatCompletionRequest>) -> LLMResult<ResultStream>` | Stream a completion request |
+
+## Error Handling
+
+All methods return `LLMResult<T>`:
+
+```rust
+use vllora_llm::error::{LLMError, ModelFinishError};
+
+match client.completions().create(request).await {
+    Ok(response) => {
+        println!("Success: {:?}", response);
+    }
+    Err(LLMError::InvalidCredentials) => {
+        eprintln!("Invalid API credentials");
+    }
+    Err(LLMError::FinishError(ModelFinishError::MaxTokens)) => {
+        eprintln!("Response exceeded max tokens");
+    }
+    Err(e) => {
+        eprintln!("Error: {}", e);
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Streaming" icon="stream" href="/sdk/streaming">
+    Learn how to stream responses in real-time
+  </Card>
+  <Card title="Client Configuration" icon="wrench" href="/sdk/client">
+    Configure the VlloraLLMClient
+  </Card>
+</CardGroup>

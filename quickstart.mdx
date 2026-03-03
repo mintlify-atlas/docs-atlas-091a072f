@@ -1,80 +1,375 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Get vLLora up and running in minutes
 ---
 
-## Get started in three steps
+Get vLLora running locally and make your first API call in under 5 minutes.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
+  <Step title="Install vLLora">
+    Install vLLora using Homebrew (macOS and Linux):
+    
+    ```bash
+    brew tap vllora/vllora
+    brew install vllora
+    ```
+    
+    For other installation methods, see the [Installation Guide](/installation).
+  </Step>
 
-### Step 1: Set up your local environment
+  <Step title="Start the server">
+    Start vLLora with a single command:
+    
+    ```bash
+    vllora
+    ```
+    
+    The server will start on:
+    - **API Server**: `http://localhost:9090`
+    - **Web UI**: `http://localhost:9091`
+    
+    The UI will automatically open in your browser.
+  </Step>
+
+  <Step title="Configure API keys">
+    Visit the web UI at `http://localhost:9091` and configure your AI provider API keys:
+    
+    1. Click **Settings** in the sidebar
+    2. Select **Providers**
+    3. Add your API keys for OpenAI, Anthropic, Gemini, or other providers
+    4. Click **Save**
+    
+    Alternatively, set API keys via environment variables:
+    
+    ```bash
+    export VLLORA_OPENAI_API_KEY="sk-..."
+    export VLLORA_ANTHROPIC_API_KEY="sk-ant-..."
+    ```
+  </Step>
+
+  <Step title="Make your first request">
+    Send a test request to vLLora:
+    
+    ```bash
+    curl http://localhost:9090/v1/chat/completions \\
+      -H "Content-Type: application/json" \\
+      -d '{
+        "model": "gpt-4o-mini",
+        "messages": [
+          {"role": "user", "content": "What is the capital of France?"}
+        ]
+      }'
+    ```
+    
+    You should see a response from the LLM and the trace will appear in the web UI in real-time!
+  </Step>
+</Steps>
+
+## What just happened?
+
+When you made that request:
+
+1. **vLLora received** your OpenAI-compatible API call
+2. **Routed the request** to your configured OpenAI provider
+3. **Collected telemetry** including prompts, responses, tokens, and timing
+4. **Broadcast the trace** to the web UI in real-time
+5. **Stored everything** in SQLite for later analysis
+
+<Note>
+Check the web UI at `http://localhost:9091` to see the full trace with request/response details, token usage, cost, and latency.
+</Note>
+
+## Try different use cases
+
+### Streaming responses
+
+<CodeGroup>
+```bash cURL
+curl http://localhost:9090/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "user", "content": "Count from 1 to 10"}
+    ],
+    "stream": true
+  }'
+```
+
+```python Python
+import openai
+
+client = openai.OpenAI(
+    base_url="http://localhost:9090/v1",
+    api_key="not-needed"  # vLLora uses configured keys
+)
+
+stream = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Count from 1 to 10"}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+```javascript JavaScript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'http://localhost:9090/v1',
+  apiKey: 'not-needed'  // vLLora uses configured keys
+});
+
+const stream = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Count from 1 to 10' }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+```rust Rust
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::types::credentials::Credentials;
+use async_openai::types::{
+    CreateChatCompletionRequestArgs, ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs, Role
+};
+use futures::StreamExt;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure client
+    let client = VlloraLLMClient::new()
+        .with_credentials(Credentials::ApiKey(
+            std::env::var("VLLORA_OPENAI_API_KEY")
+                .expect("VLLORA_OPENAI_API_KEY must be set")
+        ))
+        .build();
+
+    // Create streaming request
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4o-mini")
+        .messages(vec![
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Count from 1 to 10")
+                    .build()?
+            )
+        ])
+        .build()?;
+
+    // Stream response
+    let mut stream = client
+        .completions()
+        .create_stream(request)
+        .await?;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        for choice in chunk.choices {
+            if let Some(delta) = choice.delta.content {
+                print!("{}", delta);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+</CodeGroup>
+
+### Using different providers
+
+Switch providers without changing your code - just update the model name:
+
+```bash
+# OpenAI
+curl http://localhost:9090/v1/chat/completions \\
+  -d '{"model": "gpt-4o", "messages": [...]}'
+
+# Anthropic Claude
+curl http://localhost:9090/v1/chat/completions \\
+  -d '{"model": "claude-3-5-sonnet-20241022", "messages": [...]}'
+
+# Google Gemini
+curl http://localhost:9090/v1/chat/completions \\
+  -d '{"model": "gemini-2.0-flash-exp", "messages": [...]}'
+
+# AWS Bedrock
+curl http://localhost:9090/v1/chat/completions \\
+  -d '{"model": "anthropic.claude-3-5-sonnet-20241022-v2:0", "messages": [...]}'
+```
+
+All requests are traced identically regardless of provider!
+
+### Tracking conversations
+
+Group related requests into threads:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \\
+  -H "X-Thread-ID: conversation-123" \\
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "user", "content": "My name is Alice"}
+    ]
+  }'
+
+# Follow-up in the same thread
+curl http://localhost:9090/v1/chat/completions \\
+  -H "X-Thread-ID: conversation-123" \\
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "user", "content": "My name is Alice"},
+      {"role": "assistant", "content": "Hello Alice! How can I help you?"},
+      {"role": "user", "content": "What's my name?"}
+    ]
+  }'
+```
+
+View all traces for a thread in the UI by filtering on the thread ID.
+
+## Viewing traces
+
+### Web UI
+
+Navigate to `http://localhost:9091` to see:
+
+- **Live trace stream** - New traces appear in real-time
+- **Trace details** - Click any trace to see full request/response
+- **Token usage** - Track tokens consumed and costs
+- **Performance metrics** - See latency and throughput
+- **Search and filter** - Find traces by model, thread, labels, time
+
+### REST API
+
+Query traces programmatically:
+
+```bash
+# List recent traces
+curl http://localhost:9090/api/traces
+
+# Get specific run details
+curl http://localhost:9090/api/runs/{run_id}
+
+# Filter by time range
+curl "http://localhost:9090/api/traces?start_time=2024-01-01T00:00:00Z"
+```
+
+### CLI
+
+Query from the command line:
+
+```bash
+# List recent traces
+vllora traces list --limit 10
+
+# Show trace details
+vllora traces get --run-id {run_id}
+```
+
+## Environment variables
+
+Configure vLLora using environment variables:
+
+```bash
+# API keys for different providers
+export VLLORA_OPENAI_API_KEY="sk-..."
+export VLLORA_ANTHROPIC_API_KEY="sk-ant-..."
+export VLLORA_GOOGLE_API_KEY="..."
+export VLLORA_AWS_ACCESS_KEY_ID="..."
+export VLLORA_AWS_SECRET_ACCESS_KEY="..."
+
+# Custom ports
+export VLLORA_PORT=9090
+export VLLORA_UI_PORT=9091
+
+# Custom base URLs
+export VLLORA_OPENAI_BASE_URL="https://api.openai.com/v1"
+```
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Accordion title="Server won't start">
+    Check if ports 9090 and 9091 are already in use:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+    ```bash
+    lsof -i :9090
+    lsof -i :9091
+    ```
+    
+    Start vLLora on different ports:
+    
+    ```bash
+    vllora --port 8080 --ui-port 8081
+    ```
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+
+  <Accordion title="API calls failing">
+    Verify your API keys are configured:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    ```bash
+    curl http://localhost:9090/api/providers
+    ```
+    
+    Check vLLora logs for errors:
+    
+    ```bash
+    vllora --verbose
+    ```
+  </Accordion>
+
+  <Accordion title="Traces not appearing">
+    Check that the request reached vLLora:
+    
+    ```bash
+    curl http://localhost:9090/health
+    ```
+    
+    Verify the web UI is connected:
+    
+    ```bash
+    curl http://localhost:9090/api/events/stream
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied">
+    On macOS, you may need to allow vLLora in System Preferences \u2192 Security & Privacy.
+    
+    On Linux, ensure the binary is executable:
+    
+    ```bash
+    chmod +x $(which vllora)
+    ```
   </Accordion>
 </AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed installation and configuration
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore all API endpoints
+  </Card>
+  
+  <Card title="MCP Support" icon="server" href="/features/mcp-support">
+    Connect external tools via Model Context Protocol
+  </Card>
+  
+  <Card title="Rust SDK" icon="rust" href="/sdk/overview">
+    Build with the vllora_llm Rust library
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

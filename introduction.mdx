@@ -1,0 +1,131 @@
+---
+title: Introduction to vLLora
+description: Lightweight, real-time debugging for AI agents. Trace, analyze, and optimize AI interactions instantly.
+---
+
+<img src="https://raw.githubusercontent.com/vllora/vllora/main/assets/images/logos/logo_dark.svg" width="200px" alt="vLLora Logo" />
+
+## Lightweight, Real-time Debugging for AI Agents
+
+Debug your Agents in Real Time. Trace, analyze, and optimize instantly. Seamless with LangChain, Google ADK, OpenAI, and all major frameworks.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="bolt" href="/quickstart">
+    Get up and running with vLLora in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install vLLora on your platform
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the OpenAI-compatible API
+  </Card>
+  <Card title="Rust SDK" icon="rust" href="/sdk/overview">
+    Use the Rust LLM client library
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Real-time Tracing" icon="chart-line">
+    Monitor AI agent interactions as they happen with live observability of calls, tool interactions, and agent workflow. See exactly what your agents are doing in real-time.
+  </Card>
+  
+  <Card title="OpenAI-Compatible API" icon="plug">
+    vLLora uses OpenAI-compatible chat completions API, so when your AI agents make calls through vLLora, it automatically collects traces and debugging information for every interaction.
+  </Card>
+  
+  <Card title="MCP Support" icon="server">
+    Full support for Model Context Protocol (MCP) servers, enabling seamless integration with external tools by connecting with MCP Servers through HTTP and SSE.
+  </Card>
+  
+  <Card title="Multi-Provider Support" icon="cloud">
+    Unified interface for multiple LLM providers including OpenAI, Anthropic, Gemini, and AWS Bedrock. Switch providers without changing your code.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+vLLora acts as an intelligent proxy between your AI applications and LLM providers. It intercepts API calls, collects telemetry data, and provides real-time insights through a beautiful web interface.
+
+<Steps>
+  <Step title="Install vLLora">
+    Install vLLora using Homebrew on macOS or Linux
+  </Step>
+  
+  <Step title="Start the Server">
+    Run `vllora` to start both the API server (port 9090) and the web UI (port 9091)
+  </Step>
+  
+  <Step title="Configure API Keys">
+    Visit the web UI to configure your AI provider API keys
+  </Step>
+  
+  <Step title="Make Requests">
+    Point your applications to `http://localhost:9090` and watch the traces flow in
+  </Step>
+</Steps>
+
+## Real-time Debugging in Action
+
+![vLLora Tracing Demo](https://raw.githubusercontent.com/vllora/vllora/main/assets/gifs/traces.gif)
+
+Monitor every interaction with detailed trace information:
+
+- Request/response payloads
+- Token usage and costs
+- Latency metrics
+- Tool calls and agent workflows
+- Error tracking and debugging
+
+## Architecture
+
+vLLora is built with Rust for performance and reliability:
+
+- **Gateway**: High-performance API proxy with OpenAI-compatible endpoints
+- **Core**: Chat completion execution, routing, and streaming
+- **LLM Crate**: Unified client library for multiple providers
+- **Telemetry**: Real-time event collection and broadcasting
+- **Guardrails**: Safety and validation layer for LLM interactions
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="code">
+    Debug AI agent behavior during development with instant visibility into LLM interactions
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    Validate agent workflows and test different prompts with real-time feedback
+  </Card>
+  
+  <Card title="Monitoring" icon="monitor">
+    Track production AI applications with detailed traces and performance metrics
+  </Card>
+  
+  <Card title="Optimization" icon="gauge">
+    Identify bottlenecks, reduce costs, and improve response quality
+  </Card>
+</CardGroup>
+
+## Open Source & Fair Code
+
+vLLora is [fair-code](https://faircode.io/) distributed under the [Elastic License 2.0 (ELv2)](https://github.com/vllora/vllora/blob/main/LICENSE.md).
+
+- **Source Available**: Always visible vLLora source code
+- **Self-Hostable**: Deploy vLLora anywhere you need
+- **Extensible**: Add your own providers, tools, MCP servers, and custom functionality
+
+For Enterprise License, contact us at [hello@vllora.dev](mailto:hello@vllora.dev).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+    Get vLLora running in 5 minutes
+  </Card>
+  
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed installation instructions
+  </Card>
+</CardGroup>

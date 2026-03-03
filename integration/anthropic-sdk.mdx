@@ -1,0 +1,391 @@
+---
+title: Anthropic SDK Integration
+description: Integrate vLLora with Anthropic's Python SDK for Claude model tracing and debugging
+---
+
+While the Anthropic SDK doesn't natively support custom base URLs, you can use vLLora's OpenAI-compatible API to trace and monitor Claude models. This guide shows two approaches: using the OpenAI SDK format or using HTTP requests directly.
+
+## Approach 1: OpenAI SDK Format (Recommended)
+
+The easiest way to use Claude through vLLora is with the OpenAI SDK format:
+
+```python
+from openai import OpenAI
+
+# Use OpenAI SDK pointed at vLLora with Claude model
+client = OpenAI(
+    api_key="your-anthropic-api-key",  # Configure in vLLora UI
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[
+        {"role": "user", "content": "Hello, Claude!"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Approach 2: Direct HTTP Requests
+
+Use Python's `requests` library to make direct calls:
+
+```python
+import requests
+import json
+
+url = "http://localhost:9090/v1/chat/completions"
+
+payload = {
+    "model": "claude-opus-4-5-20251101",
+    "messages": [
+        {"role": "user", "content": "What is the capital of France?"}
+    ]
+}
+
+headers = {
+    "Content-Type": "application/json"
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+
+print(data["choices"][0]["message"]["content"])
+```
+
+## Configuration
+
+### Setup vLLora
+
+1. **Start vLLora**:
+   ```bash
+   vllora
+   ```
+
+2. **Configure Anthropic API Key**:
+   - Visit `http://localhost:9091`
+   - Navigate to Settings/Providers
+   - Add your Anthropic API key
+
+### Supported Claude Models
+
+vLLora supports all Claude models through the OpenAI-compatible interface:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+# Claude Opus
+opus_response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "Complex reasoning task"}]
+)
+
+# Claude Sonnet
+sonnet_response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514",
+    messages=[{"role": "user", "content": "Balanced task"}]
+)
+
+# Claude Haiku
+haiku_response = client.chat.completions.create(
+    model="claude-haiku-4-20250514",
+    messages=[{"role": "user", "content": "Quick task"}]
+)
+```
+
+## Streaming Responses
+
+vLLora supports streaming with Claude models:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+stream = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "Write a short story"}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+```
+
+## System Prompts
+
+Claude's system prompts work through the standard message format:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[
+        {
+            "role": "system",
+            "content": "You are a helpful AI assistant specializing in Python programming."
+        },
+        {
+            "role": "user",
+            "content": "How do I read a file in Python?"
+        }
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Tool Use (Function Calling)
+
+vLLora translates OpenAI-style function calls to Claude's tool use format:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather in a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "City name"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"]
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    }
+]
+
+response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+    tools=tools
+)
+
+if response.choices[0].message.tool_calls:
+    for tool_call in response.choices[0].message.tool_calls:
+        print(f"Tool: {tool_call.function.name}")
+        print(f"Arguments: {tool_call.function.arguments}")
+```
+
+## Advanced Features
+
+### Temperature and Max Tokens
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "Write a creative story"}],
+    temperature=0.8,
+    max_tokens=1000
+)
+```
+
+### Top-P Sampling
+
+```python
+response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "Explain quantum physics"}],
+    top_p=0.9,
+    temperature=0.7
+)
+```
+
+### Multi-turn Conversations
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+messages = [
+    {"role": "user", "content": "What is Python?"},
+]
+
+# First turn
+response1 = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=messages
+)
+
+messages.append({
+    "role": "assistant",
+    "content": response1.choices[0].message.content
+})
+messages.append({
+    "role": "user",
+    "content": "What are its main features?"
+})
+
+# Second turn
+response2 = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=messages
+)
+
+print(response2.choices[0].message.content)
+```
+
+## Async Support
+
+Use async clients for concurrent requests:
+
+```python
+import asyncio
+from openai import AsyncOpenAI
+
+async def ask_claude(question: str) -> str:
+    client = AsyncOpenAI(
+        api_key="your-anthropic-api-key",
+        base_url="http://localhost:9090/v1"
+    )
+    
+    response = await client.chat.completions.create(
+        model="claude-opus-4-5-20251101",
+        messages=[{"role": "user", "content": question}]
+    )
+    
+    return response.choices[0].message.content
+
+async def main():
+    questions = [
+        "What is AI?",
+        "Explain machine learning",
+        "What is deep learning?"
+    ]
+    
+    tasks = [ask_claude(q) for q in questions]
+    answers = await asyncio.gather(*tasks)
+    
+    for q, a in zip(questions, answers):
+        print(f"Q: {q}")
+        print(f"A: {a}\n")
+
+asyncio.run(main())
+```
+
+## Viewing Traces
+
+All Claude requests through vLLora are automatically traced:
+
+1. Open `http://localhost:9091`
+2. Navigate to **Traces**
+3. View:
+   - Request/response content
+   - Token usage
+   - Latency metrics
+   - Tool calls
+   - Cost tracking
+
+## Using with LangChain
+
+Integrate Claude through vLLora with LangChain:
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="claude-opus-4-5-20251101",
+    openai_api_key="your-anthropic-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = llm.invoke("What is the meaning of life?")
+print(response.content)
+```
+
+## Benefits
+
+- **Real-time Tracing**: Monitor all Claude interactions
+- **Unified Interface**: Use the same API format across providers
+- **Debug Tool Calls**: Inspect Claude's tool use behavior
+- **Performance Metrics**: Track latency and token usage
+- **Cost Tracking**: Monitor Anthropic API spending
+- **Multi-model Support**: Easy switching between Claude variants
+
+## Supported Parameters
+
+vLLora supports the following Claude-specific parameters:
+
+| Parameter | Supported | Notes |
+|-----------|-----------|-------|
+| `model` | ✓ | All Claude models |
+| `messages` | ✓ | Standard format |
+| `max_tokens` | ✓ | Output length limit |
+| `temperature` | ✓ | 0.0 to 1.0 |
+| `top_p` | ✓ | Nucleus sampling |
+| `top_k` | ✓ | Via provider_specific |
+| `stop_sequences` | ✓ | Stop generation |
+| `stream` | ✓ | Streaming responses |
+| `tools` | ✓ | Function calling |
+
+## Troubleshooting
+
+### API Key Configuration
+
+Ensure your Anthropic API key is set in vLLora UI at `http://localhost:9091`.
+
+### Model Not Found
+
+Verify the model name matches Anthropic's model identifiers. Check available models in the vLLora UI.
+
+### Connection Issues
+
+Test vLLora connectivity:
+
+```bash
+curl http://localhost:9090/health
+```
+
+### Rate Limits
+
+vLLora respects Anthropic's rate limits. Check the vLLora UI for rate limit information and consider implementing retry logic.
+
+## Next Steps
+
+- Learn about [OpenAI SDK Integration](/integration/openai-sdk)
+- Explore [LangChain Integration](/integration/langchain)
+- Configure [Advanced Routing](/configuration/routing)

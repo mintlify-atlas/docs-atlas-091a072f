@@ -1,0 +1,378 @@
+---
+title: Installation
+description: Install vLLora on macOS, Linux, or build from source
+---
+
+## Installation Methods
+
+vLLora can be installed via Homebrew (recommended) or built from source for development.
+
+## Homebrew Installation (Recommended)
+
+<Note>
+  Homebrew is the easiest and recommended way to install vLLora on macOS and Linux.
+</Note>
+
+<Steps>
+  <Step title="Install Homebrew">
+    If you don't have Homebrew installed, install it first:
+    
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+    
+    Visit [brew.sh](https://brew.sh) for more information.
+  </Step>
+  
+  <Step title="Tap the vLLora Repository">
+    Add the vLLora tap to Homebrew:
+    
+    ```bash
+    brew tap vllora/vllora
+    ```
+  </Step>
+  
+  <Step title="Install vLLora">
+    Install the vLLora package:
+    
+    ```bash
+    brew install vllora
+    ```
+    
+    This installs the `vllora` binary and all dependencies.
+  </Step>
+  
+  <Step title="Verify Installation">
+    Verify that vLLora is installed correctly:
+    
+    ```bash
+    vllora --version
+    ```
+  </Step>
+</Steps>
+
+## Platform Support
+
+<CardGroup cols={2}>
+  <Card title="macOS" icon="apple">
+    Fully supported via Homebrew on both Intel and Apple Silicon (M1/M2/M3) Macs
+  </Card>
+  
+  <Card title="Linux" icon="linux">
+    Supported on Ubuntu, Debian, Fedora, and other distributions via Homebrew
+  </Card>
+</CardGroup>
+
+## Building from Source
+
+For development or if you prefer to build from source:
+
+<Steps>
+  <Step title="Install Rust">
+    First, install Rust and Cargo using rustup:
+    
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+    
+    Follow the prompts to complete the installation, then restart your terminal.
+  </Step>
+  
+  <Step title="Clone the Repository">
+    Clone the vLLora repository from GitHub:
+    
+    ```bash
+    git clone https://github.com/vllora/vllora.git
+    cd vllora
+    ```
+  </Step>
+  
+  <Step title="Build the Project">
+    Build vLLora in release mode for optimal performance:
+    
+    ```bash
+    cargo build --release
+    ```
+    
+    This may take several minutes on the first build.
+  </Step>
+  
+  <Step title="Run the Binary">
+    The compiled binary will be located at `target/release/vllora`:
+    
+    ```bash
+    ./target/release/vllora
+    ```
+    
+    Optionally, add it to your PATH or create a symlink:
+    
+    ```bash
+    sudo ln -s $(pwd)/target/release/vllora /usr/local/bin/vllora
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Building from source requires a stable internet connection and may take 10-20 minutes depending on your system.
+</Warning>
+
+## Development Setup
+
+If you're contributing to vLLora or need a development environment:
+
+<Steps>
+  <Step title="Clone and Build">
+    Follow the "Building from Source" steps above.
+  </Step>
+  
+  <Step title="Run Tests">
+    Verify everything works by running the test suite:
+    
+    ```bash
+    cargo test
+    ```
+  </Step>
+  
+  <Step title="Run in Development Mode">
+    Run vLLora without the `--release` flag for faster compilation during development:
+    
+    ```bash
+    cargo run
+    ```
+    
+    <Note>
+      Development builds are slower at runtime but compile faster.
+    </Note>
+  </Step>
+</Steps>
+
+## Project Structure
+
+vLLora is organized as a Rust workspace with multiple crates:
+
+```
+vllora/
+├── gateway/        # Main API gateway server (binary)
+├── core/          # Core execution engine and routing
+├── llm/           # LLM client library (vllora_llm crate)
+├── telemetry/     # Telemetry and tracing
+├── guardrails/    # Safety and validation layer
+└── ui/            # Web interface
+```
+
+## Post-Installation
+
+<Steps>
+  <Step title="Start vLLora">
+    Launch the vLLora server:
+    
+    ```bash
+    vllora
+    ```
+    
+    The server will start on:
+    - **API Server**: `http://localhost:9090`
+    - **Web UI**: `http://localhost:9091`
+  </Step>
+  
+  <Step title="Access the Web UI">
+    Open your browser and navigate to:
+    
+    ```
+    http://localhost:9091
+    ```
+  </Step>
+  
+  <Step title="Configure API Keys">
+    In the web UI, configure your AI provider API keys:
+    - OpenAI
+    - Anthropic
+    - Google Gemini
+    - AWS Bedrock
+    - Custom OpenAI-compatible endpoints
+  </Step>
+</Steps>
+
+## Configuration
+
+### API Keys via Environment Variables
+
+Alternatively, configure API keys using environment variables before starting vLLora:
+
+```bash
+# OpenAI
+export VLLORA_OPENAI_API_KEY="sk-..."
+
+# Anthropic (Claude)
+export VLLORA_ANTHROPIC_API_KEY="sk-ant-..."
+
+# Google Gemini
+export VLLORA_GEMINI_API_KEY="..."
+
+# AWS Bedrock (requires AWS credentials)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-east-1"
+
+# Start vLLora
+vllora
+```
+
+<Note>
+  Environment variable pattern: `VLLORA_{PROVIDER_NAME}_API_KEY`
+</Note>
+
+### Custom Port Configuration
+
+By default, vLLora uses ports 9090 (API) and 9091 (UI). To customize:
+
+```bash
+# Example: Custom ports (check source for exact flags)
+vllora --api-port 8080 --ui-port 8081
+```
+
+<Warning>
+  Port configuration flags may vary. Check `vllora --help` for available options.
+</Warning>
+
+## Updating vLLora
+
+### Via Homebrew
+
+```bash
+brew upgrade vllora
+```
+
+### From Source
+
+```bash
+cd vllora
+git pull origin main
+cargo build --release
+```
+
+## Uninstalling
+
+### Via Homebrew
+
+```bash
+brew uninstall vllora
+brew untap vllora/vllora
+```
+
+### Manual Installation
+
+Remove the binary and repository:
+
+```bash
+sudo rm /usr/local/bin/vllora
+rm -rf ~/path/to/vllora
+```
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Minimum" icon="server">
+    - **CPU**: 2 cores
+    - **RAM**: 2 GB
+    - **Disk**: 500 MB
+    - **OS**: macOS 10.15+ or Linux (kernel 4.4+)
+  </Card>
+  
+  <Card title="Recommended" icon="gauge-high">
+    - **CPU**: 4+ cores
+    - **RAM**: 4+ GB
+    - **Disk**: 1 GB
+    - **OS**: macOS 12+ or Ubuntu 20.04+
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Homebrew installation fails">
+    Try updating Homebrew first:
+    
+    ```bash
+    brew update
+    brew tap vllora/vllora
+    brew install vllora
+    ```
+    
+    If the issue persists, check the [GitHub Issues](https://github.com/vllora/vllora/issues).
+  </Accordion>
+  
+  <Accordion title="Build from source fails">
+    Common solutions:
+    
+    1. Update Rust to the latest version:
+    ```bash
+    rustup update stable
+    ```
+    
+    2. Clear the build cache:
+    ```bash
+    cargo clean
+    cargo build --release
+    ```
+    
+    3. Ensure you have sufficient disk space (at least 2 GB free)
+  </Accordion>
+  
+  <Accordion title="Permission denied when running binary">
+    Make the binary executable:
+    
+    ```bash
+    chmod +x ./target/release/vllora
+    ```
+    
+    Or use `sudo` when creating symlinks:
+    
+    ```bash
+    sudo ln -s $(pwd)/target/release/vllora /usr/local/bin/vllora
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    If ports 9090 or 9091 are already in use, find the process:
+    
+    ```bash
+    lsof -i :9090
+    lsof -i :9091
+    ```
+    
+    Then either stop that process or configure vLLora to use different ports.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Make your first request to vLLora
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the OpenAI-compatible API
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure vLLora for your needs
+  </Card>
+  
+  <Card title="Deployment" icon="cloud" href="/guides/deployment">
+    Deploy vLLora to production
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you encounter issues during installation:
+
+- Check the [GitHub Issues](https://github.com/vllora/vllora/issues)
+- Review the [Contributing Guide](https://github.com/vllora/vllora/blob/main/CONTRIBUTING.md)
+- Join the community discussions
+
+<Note>
+  For enterprise support and custom deployments, contact [hello@vllora.dev](mailto:hello@vllora.dev).
+</Note>

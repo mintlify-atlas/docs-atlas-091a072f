@@ -1,0 +1,217 @@
+---
+title: Traces
+description: Query and analyze execution traces and spans
+---
+
+Traces represent the execution flow of your AI applications. Each trace contains spans that track operations like LLM calls, tool executions, and agent actions.
+
+## List Traces
+
+Retrieve traces with optional filtering and pagination.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:3002/traces?limit=50&offset=0" \
+  -H "x-project-slug: default"
+```
+
+```python Python
+import requests
+
+headers = {"x-project-slug": "default"}
+params = {
+    "limit": 50,
+    "offset": 0,
+    "runId": "run_123",
+    "operationNames": "openai,anthropic"
+}
+
+response = requests.get(
+    "http://localhost:3002/traces",
+    headers=headers,
+    params=params
+)
+data = response.json()
+```
+</CodeGroup>
+
+<ParamField query="runId" type="string">
+  Filter traces by run ID
+</ParamField>
+
+<ParamField query="operationNames" type="string">
+  Comma-separated list of operation names to filter by (e.g., "openai,anthropic,tools")
+</ParamField>
+
+<ParamField query="threadIds" type="string">
+  Comma-separated list of thread IDs to filter by
+</ParamField>
+
+<ParamField query="startTimeMin" type="integer">
+  Minimum start time in microseconds (Unix timestamp)
+</ParamField>
+
+<ParamField query="startTimeMax" type="integer">
+  Maximum start time in microseconds (Unix timestamp)
+</ParamField>
+
+<ParamField query="labels" type="string">
+  Comma-separated list of labels to filter by (e.g., "flight_search,budget_agent")
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Number of traces to return (max 100)
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of traces to skip for pagination
+</ParamField>
+
+<ResponseField name="data" type="array">
+  Array of trace/span objects
+  
+  <Expandable title="Span Object">
+    <ResponseField name="trace_id" type="string" required>
+      Unique trace identifier
+    </ResponseField>
+    
+    <ResponseField name="span_id" type="string" required>
+      Unique span identifier
+    </ResponseField>
+    
+    <ResponseField name="parent_span_id" type="string">
+      Parent span ID if this is a child span
+    </ResponseField>
+    
+    <ResponseField name="run_id" type="string">
+      Associated run ID
+    </ResponseField>
+    
+    <ResponseField name="thread_id" type="string">
+      Associated thread ID
+    </ResponseField>
+    
+    <ResponseField name="operation_name" type="string" required>
+      Operation type: run, agent, task, tools, openai, anthropic, bedrock, gemini, cloud_api_invoke, api_invoke, model_call
+    </ResponseField>
+    
+    <ResponseField name="start_time_us" type="integer" required>
+      Start time in microseconds
+    </ResponseField>
+    
+    <ResponseField name="finish_time_us" type="integer" required>
+      Finish time in microseconds
+    </ResponseField>
+    
+    <ResponseField name="attribute" type="object" required>
+      Span attributes containing operation-specific data (inputs, outputs, metadata)
+    </ResponseField>
+    
+    <ResponseField name="child_attribute" type="object">
+      Aggregated attributes from child spans
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata
+  
+  <Expandable title="Pagination">
+    <ResponseField name="offset" type="integer">
+      Current offset
+    </ResponseField>
+    
+    <ResponseField name="limit" type="integer">
+      Current limit
+    </ResponseField>
+    
+    <ResponseField name="total" type="integer">
+      Total number of traces matching the query
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Spans by Run
+
+Retrieve all spans associated with a specific run ID.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:3002/runs/{run_id}?limit=100&offset=0" \
+  -H "x-project-slug: default"
+```
+
+```python Python
+import requests
+
+run_id = "run_abc123"
+headers = {"x-project-slug": "default"}
+params = {"limit": 100, "offset": 0}
+
+response = requests.get(
+    f"http://localhost:3002/runs/{run_id}",
+    headers=headers,
+    params=params
+)
+data = response.json()
+```
+</CodeGroup>
+
+<ParamField path="run_id" type="string" required>
+  The run ID to retrieve spans for
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Number of spans to return
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of spans to skip for pagination
+</ParamField>
+
+<ResponseField name="data" type="array">
+  Array of span objects (see List Traces for structure)
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata with offset, limit, and total count
+</ResponseField>
+
+## Operation Types
+
+The `operation_name` field indicates the type of operation tracked by the span:
+
+- **run** - Top-level execution run
+- **agent** - Agent execution
+- **task** - Task execution
+- **tools** - Tool/function call
+- **openai** - OpenAI API call
+- **anthropic** - Anthropic API call
+- **bedrock** - AWS Bedrock API call
+- **gemini** - Google Gemini API call
+- **cloud_api_invoke** - Cloud API invocation
+- **api_invoke** - Generic API invocation
+- **model_call** - Generic model call
+
+## Filtering Examples
+
+### Filter by Time Range
+
+```bash
+curl -X GET "http://localhost:3002/traces?startTimeMin=1709481600000000&startTimeMax=1709568000000000" \
+  -H "x-project-slug: default"
+```
+
+### Filter by Operation and Labels
+
+```bash
+curl -X GET "http://localhost:3002/traces?operationNames=openai,anthropic&labels=production,high_priority" \
+  -H "x-project-slug: default"
+```
+
+### Filter by Thread and Run
+
+```bash
+curl -X GET "http://localhost:3002/traces?threadIds=thread_123&runId=run_456" \
+  -H "x-project-slug: default"
+```

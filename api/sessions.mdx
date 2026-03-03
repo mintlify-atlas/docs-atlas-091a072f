@@ -1,0 +1,166 @@
+---
+title: Sessions
+description: Manage user sessions and API credentials
+---
+
+Sessions provide authentication and credential management for vLLora's cloud features and API access.
+
+## Start Session
+
+Create a new session for cloud API access.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3002/session/start
+```
+
+```python Python
+import requests
+
+response = requests.post("http://localhost:3002/session/start")
+session = response.json()
+print(f"Session ID: {session['session_id']}")
+```
+</CodeGroup>
+
+<ResponseField name="session_id" type="string" required>
+  Unique session identifier for this instance
+</ResponseField>
+
+## Track Session
+
+Associate an email address with an active session for user tracking.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3002/session/track \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com"
+  }'
+```
+
+```python Python
+import requests
+
+data = {"email": "user@example.com"}
+response = requests.post(
+    "http://localhost:3002/session/track",
+    json=data
+)
+```
+</CodeGroup>
+
+<ParamField body="email" type="string" required>
+  User's email address for session tracking
+</ParamField>
+
+<Info>
+This endpoint tracks sessions asynchronously and returns immediately. Session tracking is used for analytics and user engagement.
+</Info>
+
+## Fetch API Key
+
+Retrieve API credentials for a session.
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:3002/session/fetch_key/{session_id} \
+  -H "x-project-slug: default"
+```
+
+```python Python
+import requests
+
+session_id = "sess_abc123"
+headers = {"x-project-slug": "default"}
+
+response = requests.get(
+    f"http://localhost:3002/session/fetch_key/{session_id}",
+    headers=headers
+)
+
+if response.status_code == 200:
+    credentials = response.json()
+    api_key = credentials["api_key"]
+else:
+    print("Session not found or no API key available")
+```
+</CodeGroup>
+
+<ParamField path="session_id" type="string" required>
+  The session ID to fetch credentials for
+</ParamField>
+
+<ResponseField name="api_key" type="string" required>
+  The API key associated with this session
+</ResponseField>
+
+<Warning>
+The API key is automatically stored in your project's key storage after fetching. Keep session IDs secure as they can be used to retrieve API credentials.
+</Warning>
+
+## Response Codes
+
+### Fetch API Key Responses
+
+- **200 OK** - Credentials successfully retrieved
+- **404 Not Found** - Session ID not found or no API key available
+- **500 Internal Server Error** - Failed to fetch or store credentials
+
+## Session Lifecycle
+
+1. **Start** - Create a session using `/session/start`
+2. **Track** (Optional) - Associate email with session for analytics
+3. **Fetch Key** - Retrieve API credentials when needed
+4. **Use** - Credentials are automatically available for API calls
+
+## Use Cases
+
+### Cloud API Integration
+
+Sessions enable integration with vLLora's cloud services:
+
+```python
+import requests
+
+# Start a session
+session_response = requests.post("http://localhost:3002/session/start")
+session_id = session_response.json()["session_id"]
+
+# Track the session
+requests.post(
+    "http://localhost:3002/session/track",
+    json={"email": "user@example.com"}
+)
+
+# Fetch credentials (stored automatically)
+headers = {"x-project-slug": "default"}
+requests.get(
+    f"http://localhost:3002/session/fetch_key/{session_id}",
+    headers=headers
+)
+
+# Credentials are now available for cloud API calls
+```
+
+### Device Identification
+
+Sessions automatically include device identification headers for tracking and analytics. The system forwards custom headers starting with `x-` and standard headers like `User-Agent` to the cloud API.
+
+## Security Notes
+
+- Session IDs are unique per vLLora instance
+- API keys are stored securely in the project's key storage
+- Keys are scoped to specific projects via the `x-project-slug` header
+- Session tracking is non-blocking and doesn't affect API performance
+
+## Environment Configuration
+
+The cloud API URL can be configured via environment variable:
+
+```bash
+export LANGDB_API_URL=https://your-cloud-api.com
+```
+
+If not set, the default vLLora cloud API URL is used.

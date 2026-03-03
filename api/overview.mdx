@@ -1,0 +1,119 @@
+---
+title: Gateway API Overview
+description: OpenAI-compatible REST API for chat completions, embeddings, and image generation
+---
+
+vLLora provides a fully OpenAI-compatible Gateway API that allows you to interact with various LLM providers through a unified interface. The API supports chat completions, embeddings, and image generation across multiple models and providers.
+
+## Base URL
+
+All API requests should be made to:
+
+```
+https://your-gateway-url/v1
+```
+
+## Authentication
+
+Authenticate your API requests using an API key in the `Authorization` header:
+
+```bash
+Authorization: Bearer YOUR_API_KEY
+```
+
+## Supported Endpoints
+
+<CardGroup cols={3}>
+  <Card title="Chat Completions" icon="comments" href="/api/chat-completions">
+    Generate conversational responses with streaming support
+  </Card>
+  <Card title="Embeddings" icon="vector-square" href="/api/embeddings">
+    Create text embeddings for semantic search and analysis
+  </Card>
+  <Card title="Image Generation" icon="image" href="/api/image-generation">
+    Generate images from text prompts
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Multi-Provider Support
+
+The Gateway API intelligently routes requests to different providers based on your configuration:
+
+- OpenAI
+- Anthropic (Claude)
+- Google (Gemini)
+- AWS Bedrock
+- Azure OpenAI
+- And more...
+
+### Advanced Routing
+
+Support for sophisticated routing strategies:
+
+- **Model-based routing**: Route to specific models across providers
+- **Dynamic routing**: Configure fallbacks and retries
+- **Load balancing**: Distribute requests across multiple providers
+
+### Request Tracking
+
+All requests include automatic tracking with:
+
+- **Thread ID**: Group related conversations via `X-Thread-Id` header
+- **Run ID**: Track individual request executions
+- **Custom tags**: Add metadata via `X-Tags` header
+
+### Telemetry & Monitoring
+
+Built-in observability:
+
+- Request/response logging
+- Cost tracking per request
+- Token usage monitoring
+- Performance metrics
+
+## OpenAI Compatibility
+
+The Gateway API maintains full compatibility with OpenAI's API specification, allowing you to:
+
+- Use existing OpenAI client libraries
+- Swap providers without changing code
+- Leverage familiar request/response formats
+
+## Rate Limiting
+
+The Gateway includes built-in rate limiting to protect your infrastructure and manage costs. Rate limits can be configured per user, tier, or globally.
+
+## Error Handling
+
+The API returns standard HTTP status codes:
+
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `401` - Unauthorized (missing or invalid API key)
+- `429` - Too Many Requests (rate limit exceeded)
+- `500` - Internal Server Error
+
+Error responses include detailed messages to help diagnose issues:
+
+```json
+{
+  "error": {
+    "message": "Model not found: invalid-model",
+    "type": "invalid_request_error",
+    "code": "model_not_found"
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Chat Completions" icon="comments" href="/api/chat-completions">
+    Learn about the chat completions endpoint
+  </Card>
+  <Card title="Embeddings" icon="vector-square" href="/api/embeddings">
+    Generate embeddings for your text
+  </Card>
+</CardGroup>

@@ -1,0 +1,300 @@
+---
+title: 'Real-Time Tracing'
+description: 'Understanding vLLora real-time tracing and observability system'
+icon: 'radar'
+---
+
+## Overview
+
+vLLora provides real-time distributed tracing for AI agents and LLM applications using OpenTelemetry. Every request, model call, tool invocation, and agent action is automatically captured as structured spans, giving you complete visibility into your AI application's behavior.
+
+## Tracing Architecture
+
+### OpenTelemetry Integration
+
+vLLora implements a custom OpenTelemetry pipeline built on the OpenTelemetry SDK:
+
+```rust
+// From gateway/src/tracing.rs
+let trace_provider = SdkTracerProvider::builder()
+    .with_span_processor(BaggageSpanProcessor::new([
+        "vllora.run_id",
+        "vllora.thread_id",
+        "vllora.label",
+        "vllora.tenant",
+        "vllora.project_id",
+    ]))
+    .with_simple_exporter(run_span_buffer_exporter)
+    .with_simple_exporter(project_trace_span_exporter)
+    .with_batch_exporter(otlp_span_exporter)
+    .with_id_generator(events::UuidIdGenerator::default())
+    .build();
+```
+
+<Info>
+vLLora uses UUIDs for trace IDs instead of the standard OpenTelemetry format, making traces easier to query and correlate.
+</Info>
+
+### Multi-Layer Export Strategy
+
+Traces are simultaneously exported to three destinations:
+
+<CardGroup cols={3}>
+  <Card title="SQLite Storage" icon="database">
+    Local persistence for querying and analysis
+  </Card>
+  <Card title="Project Broadcast" icon="signal-stream">
+    Real-time streaming to connected UI clients
+  </Card>
+  <Card title="OTLP Endpoint" icon="cloud">
+    External observability platforms (optional)
+  </Card>
+</CardGroup>
+
+## Span Types
+
+vLLora creates different span types for different operations:
+
+### Model Spans
+
+Created for every LLM API call with rich attributes:
+
+```rust
+// Attributes captured:
+- model_name: String
+- provider: String (openai, anthropic, gemini, bedrock)
+- prompt_tokens: u64
+- completion_tokens: u64
+- total_tokens: u64
+- finish_reason: String
+- streaming: bool
+- temperature: f32
+- max_tokens: Option<u32>
+```
+
+### Tool Spans
+
+Tool invocations are traced with:
+
+```rust
+- tool_name: String
+- tool_input: JSON
+- tool_output: JSON
+- execution_time_ms: f64
+- success: bool
+```
+
+### Agent Spans
+
+Agent execution flows create hierarchical spans:
+
+```rust
+- agent_type: String
+- iteration: u32
+- total_steps: u32
+- decision_reason: String
+```
+
+### API Invoke Spans
+
+HTTP requests to the gateway:
+
+```rust
+- http.method: String
+- http.route: String
+- http.status_code: u16
+- project_id: UUID
+- run_id: UUID
+- thread_id: Option<UUID>
+```
+
+## Real-Time Broadcasting
+
+### Broadcast Channel System
+
+vLLora uses a sophisticated broadcast system for real-time trace delivery:
+
+```rust
+// From gateway/src/main.rs
+let project_trace_senders = Arc::new(BroadcastChannelManager::new(Default::default()));
+
+// Automatic cleanup of inactive channels
+vllora_core::events::broadcast_channel_manager::start_cleanup_task(
+    (*project_trace_senders_cleanup).clone(),
+);
+```
+
+Each project gets its own broadcast channel. When clients connect to the UI, they subscribe to their project's channel and receive spans in real-time as they're generated.
+
+### Span Buffering
+
+To optimize performance, spans are buffered before database writes:
+
+```rust
+let run_span_buffer = Arc::new(RunSpanBuffer::new(Duration::from_secs(20)));
+```
+
+<Accordion title="Buffering Behavior">
+  - Spans are collected in memory for up to 20 seconds
+  - Batch writes occur when buffer reaches 1000 spans or on interval
+  - Ensures low-latency real-time delivery while reducing database I/O
+</Accordion>
+
+## Trace Storage
+
+### Database Schema
+
+Traces are stored in the `vllora.traces` table:
+
+```sql
+CREATE TABLE vllora.traces (
+    trace_id TEXT,
+    span_id INTEGER,
+    parent_span_id INTEGER,
+    operation_name TEXT,
+    start_time_us INTEGER,
+    finish_time_us INTEGER,
+    finish_date DATE,
+    kind TEXT,
+    attribute JSON,
+    tenant_id TEXT,
+    project_id TEXT,
+    thread_id TEXT,
+    tags JSON,
+    run_id TEXT
+);
+```
+
+### Span Processing Pipeline
+
+From `telemetry/src/lib.rs`, the `SpanWriter` processes incoming spans:
+
+```rust
+pub(crate) fn process(&mut self, span: Span) {
+    if parent_span_id.is_none() {
+        self.finished_traces.push(trace_id);
+    }
+    self.buf.push(vec![
+        trace_id_uuid(trace_id).to_string().into(),
+        u64::from_be_bytes(span_id.to_bytes()).into(),
+        // ... additional fields
+    ]);
+}
+```
+
+<Steps>
+  <Step title="Span Reception">
+    Spans arrive via the OTLP gRPC endpoint or internal exporters
+  </Step>
+  <Step title="Attribute Extraction">
+    vLLora-specific attributes are extracted (project_id, run_id, etc.)
+  </Step>
+  <Step title="Buffering">
+    Spans are added to an in-memory buffer
+  </Step>
+  <Step title="Broadcasting">
+    Spans are sent to project-specific broadcast channels
+  </Step>
+  <Step title="Batch Insertion">
+    Buffer is flushed to SQLite every second or when reaching 1000 spans
+  </Step>
+</Steps>
+
+## Context Propagation
+
+vLLora uses OpenTelemetry Baggage to propagate context across service boundaries:
+
+### Baggage Items
+
+- **vllora.run_id**: Unique identifier for a single execution
+- **vllora.thread_id**: Conversation thread identifier
+- **vllora.project_id**: Project context
+- **vllora.label**: User-defined label for filtering
+- **vllora.tenant**: Multi-tenancy support
+
+### Baggage Processor
+
+From `telemetry/src/baggage.rs`, the `BaggageSpanProcessor` ensures these values are attached to every span:
+
+```rust
+BaggageSpanProcessor::new([
+    "vllora.run_id",
+    "vllora.thread_id",
+    "vllora.label",
+    "vllora.tenant",
+    "vllora.project_id",
+])
+```
+
+## Querying Traces
+
+### CLI Commands
+
+vLLora provides CLI commands for trace inspection:
+
+```bash
+# List all traces
+vllora traces list
+
+# Get trace overview
+vllora traces overview <trace_id>
+
+# Get detailed run information
+vllora traces run-info <run_id>
+
+# Get specific call details
+vllora traces call-info <span_id>
+```
+
+### UI Integration
+
+The web UI connects to the broadcast channels and displays:
+
+- **Real-time trace viewer**: Live span updates as they occur
+- **Trace timeline**: Gantt chart of span execution
+- **Span details**: Full attribute inspection
+- **Thread grouping**: Related spans grouped by conversation
+- **Cost tracking**: Aggregated token usage and costs
+
+## Metrics Collection
+
+In addition to traces, vLLora collects metrics:
+
+```rust
+// From gateway/src/tracing.rs
+let otlp_metrics_exporter = opentelemetry_otlp::MetricExporterBuilder::new()
+    .with_tonic()
+    .build();
+
+let otlp_reader = opentelemetry_sdk::metrics::PeriodicReader::builder(exporter)
+    .with_interval(std::time::Duration::from_secs(10))
+    .build();
+```
+
+<Note>
+Metrics are exported every 10 seconds to both OTLP endpoints and the local SQLite database.
+</Note>
+
+## Performance Considerations
+
+### Low Overhead
+
+- Async processing: Spans are processed on separate tokio tasks
+- Batched writes: Reduces database contention
+- Selective sampling: Optional sampling for high-volume scenarios
+
+### Cleanup Tasks
+
+Automatic cleanup prevents memory leaks:
+
+```rust
+vllora_core::events::broadcast_channel_manager::start_cleanup_task(
+    (*project_trace_senders_cleanup).clone(),
+);
+```
+
+Inactive broadcast channels are removed after a timeout period.
+
+<Tip>
+For high-throughput applications, consider increasing the buffer flush interval or implementing custom sampling strategies.
+</Tip>

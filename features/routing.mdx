@@ -1,0 +1,508 @@
+---
+title: Request routing
+description: Intelligent request routing with fallbacks, load balancing, and multi-provider support
+---
+
+vLLora provides sophisticated request routing capabilities that allow you to distribute LLM requests across multiple providers, implement fallback strategies, and optimize for cost, latency, or reliability.
+
+## Overview
+
+Routing in vLLora enables you to:
+
+- **Multi-provider support** - Route to OpenAI, Anthropic, Gemini, Bedrock, and custom providers
+- **Automatic fallbacks** - Retry failed requests on different providers
+- **Load balancing** - Distribute requests based on various strategies
+- **Cost optimization** - Route to cheaper models when appropriate
+- **A/B testing** - Split traffic between different models or configurations
+
+<CardGroup cols={2}>
+  <Card title="Provider flexibility" icon="shuffle">
+    Switch between providers seamlessly without code changes
+  </Card>
+  <Card title="High availability" icon="shield-check">
+    Automatic failover ensures requests succeed even if providers fail
+  </Card>
+  <Card title="Cost control" icon="dollar-sign">
+    Route to cost-effective models based on request characteristics
+  </Card>
+  <Card title="Performance tuning" icon="gauge-high">
+    Optimize for latency, throughput, or quality
+  </Card>
+</CardGroup>
+
+## Routing strategies
+
+vLLora implements several routing strategies, each suited for different use cases:
+
+### 1. Fallback routing
+
+Try providers in sequence until one succeeds:
+
+```json
+{
+  "model": "gpt-4o",
+  "messages": [...],
+  "extra": {
+    "router": {
+      "strategy": "fallback",
+      "targets": [
+        {"provider": "openai", "model": "gpt-4o"},
+        {"provider": "azure", "model": "gpt-4o"},
+        {"provider": "anthropic", "model": "claude-3-5-sonnet-20241022"}
+      ]
+    }
+  }
+}
+```
+
+If OpenAI fails, vLLora automatically retries with Azure, then Anthropic.
+
+### 2. Percentage routing
+
+Split traffic by percentage for A/B testing:
+
+```json
+{
+  "extra": {
+    "router": {
+      "strategy": "percentage",
+      "targets": [
+        {"provider": "openai", "model": "gpt-4o", "weight": 70},
+        {"provider": "anthropic", "model": "claude-3-5-sonnet-20241022", "weight": 30}
+      ]
+    }
+  }
+}
+```
+
+70% of requests go to OpenAI, 30% to Anthropic.
+
+### 3. Conditional routing
+
+Route based on request characteristics:
+
+```json
+{
+  "extra": {
+    "router": {
+      "strategy": "conditional",
+      "rules": [
+        {
+          "condition": "input_tokens < 1000",
+          "target": {"provider": "openai", "model": "gpt-4o-mini"}
+        },
+        {
+          "condition": "input_tokens >= 1000",
+          "target": {"provider": "anthropic", "model": "claude-3-5-sonnet-20241022"}
+        }
+      ]
+    }
+  }
+}
+```
+
+Short requests use the cheaper gpt-4o-mini, longer ones use Claude Sonnet.
+
+### 4. Optimized routing
+
+Automatically select the best provider based on metrics:
+
+```json
+{
+  "extra": {
+    "router": {
+      "strategy": "optimized",
+      "metric": "latency",
+      "targets": [
+        {"provider": "openai"},
+        {"provider": "anthropic"},
+        {"provider": "gemini"}
+      ]
+    }
+  }
+}
+```
+
+vLLora routes to the provider with the lowest latency based on historical data.
+
+Available metrics:
+- `latency` - Fastest response time
+- `cost` - Lowest cost per token
+- `success_rate` - Highest success rate
+- `throughput` - Highest tokens per second
+
+## Router configuration
+
+### Via request
+
+Specify routing inline with each request:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "extra": {
+      "router": {
+        "strategy": "fallback",
+        "targets": [
+          {"provider": "openai"},
+          {"provider": "azure"}
+        ]
+      }
+    }
+  }'
+```
+
+### Via configuration file
+
+Define global routing rules:
+
+```yaml
+# config.yaml
+routers:
+  - name: production_router
+    strategy: fallback
+    targets:
+      - provider: openai
+        model: gpt-4o
+      - provider: azure
+        model: gpt-4o
+      - provider: anthropic
+        model: claude-3-5-sonnet-20241022
+    metrics_duration: last_hour
+
+  - name: cost_optimizer
+    strategy: conditional
+    rules:
+      - condition: "input_tokens < 500"
+        target:
+          provider: openai
+          model: gpt-4o-mini
+      - condition: "input_tokens >= 500"
+        target:
+          provider: anthropic
+          model: claude-3-5-haiku-20241022
+```
+
+Then reference the router by name:
+
+```json
+{
+  "extra": {
+    "router": "production_router"
+  }
+}
+```
+
+## Provider targeting
+
+### Basic provider selection
+
+```json
+{
+  "target": {
+    "provider": "anthropic"
+  }
+}
+```
+
+Uses the default model for that provider.
+
+### Specific model
+
+```json
+{
+  "target": {
+    "provider": "anthropic",
+    "model": "claude-3-5-sonnet-20241022"
+  }
+}
+```
+
+### Custom endpoint
+
+```json
+{
+  "target": {
+    "provider": "custom",
+    "endpoint": "https://my-llm-service.com/v1/chat/completions",
+    "api_key": "custom-key"
+  }
+}
+```
+
+### Provider-specific parameters
+
+```json
+{
+  "target": {
+    "provider": "anthropic",
+    "model": "claude-3-5-sonnet-20241022",
+    "parameters": {
+      "max_tokens": 4096,
+      "temperature": 0.7
+    }
+  }
+}
+```
+
+## Fallback strategies
+
+### Automatic retry
+
+vLLora automatically retries failed requests on the next target:
+
+```rust
+// From core/src/routing/mod.rs
+pub async fn route_with_fallback(
+    targets: Vec<Target>,
+) -> Result<Response> {
+    for target in targets {
+        match execute_request(target).await {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                tracing::warn!("Target failed: {}, trying next", e);
+                continue;
+            }
+        }
+    }
+    Err("All targets failed")
+}
+```
+
+### Retry configuration
+
+```json
+{
+  "router": {
+    "strategy": "fallback",
+    "targets": [...],
+    "max_retries": 3,
+    "retry_delay_ms": 1000
+  }
+}
+```
+
+### Error handling
+
+Different errors trigger different behaviors:
+
+- **Rate limits** (429) - Wait and retry with backoff
+- **Server errors** (5xx) - Immediately try next target
+- **Client errors** (4xx) - Fail without retrying (bad request)
+- **Network errors** - Retry with next target
+
+## Load balancing
+
+### Round-robin
+
+Distribute requests evenly:
+
+```json
+{
+  "router": {
+    "strategy": "round_robin",
+    "targets": [
+      {"provider": "openai"},
+      {"provider": "anthropic"},
+      {"provider": "gemini"}
+    ]
+  }
+}
+```
+
+### Weighted distribution
+
+Control distribution with weights:
+
+```json
+{
+  "router": {
+    "strategy": "weighted",
+    "targets": [
+      {"provider": "openai", "weight": 50},
+      {"provider": "anthropic", "weight": 30},
+      {"provider": "gemini", "weight": 20}
+    ]
+  }
+}
+```
+
+### Least-loaded
+
+Route to the provider with the fewest active requests:
+
+```json
+{
+  "router": {
+    "strategy": "least_loaded",
+    "targets": [
+      {"provider": "openai"},
+      {"provider": "anthropic"}
+    ]
+  }
+}
+```
+
+## Cost optimization
+
+### Model selection by cost
+
+Route to cheaper models when possible:
+
+```json
+{
+  "router": {
+    "strategy": "conditional",
+    "rules": [
+      {
+        "condition": "estimated_cost < 0.01",
+        "target": {"provider": "openai", "model": "gpt-4o-mini"}
+      },
+      {
+        "condition": "estimated_cost >= 0.01",
+        "target": {"provider": "anthropic", "model": "claude-3-5-haiku-20241022"}
+      }
+    ]
+  }
+}
+```
+
+### Budget-based routing
+
+Route based on remaining budget:
+
+```json
+{
+  "router": {
+    "strategy": "budget_aware",
+    "budget": {
+      "limit": 100.0,
+      "period": "day"
+    },
+    "targets": [
+      {"provider": "openai", "model": "gpt-4o", "priority": 1},
+      {"provider": "openai", "model": "gpt-4o-mini", "priority": 2}
+    ]
+  }
+}
+```
+
+Uses gpt-4o until budget is exceeded, then switches to gpt-4o-mini.
+
+## Performance optimization
+
+### Latency-based routing
+
+Route to fastest providers:
+
+```json
+{
+  "router": {
+    "strategy": "optimized",
+    "metric": "latency",
+    "targets": [...],
+    "metrics_duration": "last_15_minutes"
+  }
+}
+```
+
+### Geographic routing
+
+Route to providers closest to the user:
+
+```json
+{
+  "router": {
+    "strategy": "geographic",
+    "targets": [
+      {"provider": "openai", "region": "us-east"},
+      {"provider": "azure", "region": "eu-west"},
+      {"provider": "gemini", "region": "asia-pacific"}
+    ]
+  }
+}
+```
+
+## Monitoring routing decisions
+
+### Trace routing
+
+Routing decisions are recorded in traces:
+
+```bash
+curl http://localhost:9090/api/traces
+```
+
+Response includes routing metadata:
+
+```json
+{
+  "run_id": "run_123",
+  "routing": {
+    "strategy": "fallback",
+    "attempted_targets": [
+      {"provider": "openai", "result": "failed", "error": "rate_limit"},
+      {"provider": "azure", "result": "success"}
+    ],
+    "final_provider": "azure"
+  }
+}
+```
+
+### Metrics
+
+Track routing effectiveness:
+
+```bash
+curl http://localhost:9090/api/metrics/routing
+```
+
+Returns:
+- Success rate per provider
+- Average latency per provider
+- Cost per provider
+- Fallback frequency
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always configure fallbacks">
+    Providers can fail unexpectedly. Always configure at least 2-3 fallback targets to ensure high availability.
+  </Accordion>
+
+  <Accordion title="Monitor routing metrics">
+    Track which providers are used most frequently, their success rates, and costs. Use this data to optimize routing strategies.
+  </Accordion>
+
+  <Accordion title="Test routing in development">
+    Verify routing behavior in development before deploying to production. Use trace inspection to confirm requests route as expected.
+  </Accordion>
+
+  <Accordion title="Use conditional routing for cost control">
+    Route simple requests to cheaper models and complex ones to premium models. This balances cost and quality.
+  </Accordion>
+
+  <Accordion title="Set appropriate retry limits">
+    Don't retry indefinitely. Set `max_retries` to prevent cascading failures and excessive latency.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Providers" icon="server" href="/concepts/providers">
+    Learn about supported providers
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure routing in config.yaml
+  </Card>
+  <Card title="Tracing" icon="chart-line" href="/features/tracing">
+    Monitor routing decisions
+  </Card>
+  <Card title="API reference" icon="code" href="/api/chat-completions">
+    Router API documentation
+  </Card>
+</CardGroup>

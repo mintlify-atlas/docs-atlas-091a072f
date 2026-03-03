@@ -1,0 +1,395 @@
+---
+title: MCP Configuration
+description: Configure MCP servers in vLLora to connect with external tools and services
+---
+
+## Configuration Structure
+
+vLLora uses the `McpDefinition` structure to configure MCP server connections. Each definition includes:
+
+- **Transport type**: How to connect (HTTP, SSE, WebSocket, or in-memory)
+- **Server URL**: Endpoint of the MCP server
+- **Headers**: Optional authentication headers
+- **Environment variables**: Optional environment configuration
+- **Tool filter**: Which tools to load from the server
+
+## Transport Configuration
+
+### SSE (Server-Sent Events)
+
+Recommended for streaming responses and long-lived connections.
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.deepwiki.com/sse",
+  "headers": {},
+  "env": null,
+  "filter": "all"
+}
+```
+
+**Use cases:**
+- Streaming search results
+- Real-time data feeds
+- Long-running operations
+
+### HTTP
+
+Standard request/response pattern for simple operations.
+
+```json
+{
+  "type": "http",
+  "server_url": "https://mcp.deepwiki.com/mcp",
+  "headers": {},
+  "env": null,
+  "filter": "all"
+}
+```
+
+**Use cases:**
+- Simple API calls
+- Stateless operations
+- Quick tool executions
+
+### WebSocket
+
+Bidirectional streaming for interactive applications.
+
+```json
+{
+  "type": "ws",
+  "server_url": "wss://api.example.com/mcp",
+  "headers": {},
+  "env": null,
+  "filter": "all"
+}
+```
+
+**Use cases:**
+- Interactive chat applications
+- Real-time collaboration
+- Bidirectional data flow
+
+### In-Memory
+
+Direct access to built-in vLLora MCP tools.
+
+```json
+{
+  "type": "in-memory",
+  "name": "websearch"
+}
+```
+
+**Available in-memory servers:**
+- `websearch` / `Web Search`: Built-in web search capabilities
+
+## Authentication
+
+### Bearer Token
+
+Most common authentication method for API services:
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.devin.ai/sse",
+  "headers": {
+    "Authorization": "Bearer YOUR_API_KEY"
+  }
+}
+```
+
+### API Key Headers
+
+Some services use custom header names:
+
+```json
+{
+  "type": "http",
+  "server_url": "https://api.example.com/mcp",
+  "headers": {
+    "X-API-Key": "your-api-key",
+    "X-Client-ID": "your-client-id"
+  }
+}
+```
+
+### Custom Headers
+
+Pass any headers required by your MCP server:
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://api.example.com/mcp",
+  "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "vLLora/1.0",
+    "X-Custom-Header": "value"
+  }
+}
+```
+
+<Warning>
+  Invalid header names or values will be skipped silently. Check logs for warnings about invalid headers.
+</Warning>
+
+## Tool Filtering
+
+### Load All Tools
+
+Default behavior - loads all tools from the MCP server:
+
+```json
+{
+  "filter": "all"
+}
+```
+
+### Select Specific Tools
+
+Load only specific tools by name:
+
+```json
+{
+  "filter": {
+    "selected": [
+      { "name": "search_web" },
+      { "name": "get_weather" },
+      { "name": "analyze_document" }
+    ]
+  }
+}
+```
+
+### Regex Pattern Matching
+
+Select tools matching regex patterns:
+
+```json
+{
+  "filter": {
+    "selected": [
+      { "name": "search_.*" },
+      { "name": "get_.*" },
+      { "name": ".*_analysis" }
+    ]
+  }
+}
+```
+
+### Override Tool Descriptions
+
+Provide custom descriptions for selected tools:
+
+```json
+{
+  "filter": {
+    "selected": [
+      {
+        "name": "search_web",
+        "description": "Search the web for current information on any topic. Use this when you need up-to-date information."
+      }
+    ]
+  }
+}
+```
+
+## Environment Variables
+
+Pass environment configuration to MCP servers:
+
+```json
+{
+  "type": "http",
+  "server_url": "https://api.example.com/mcp",
+  "env": {
+    "TAVILY_API_KEY": "tvly-...",
+    "REGION": "us-west-2",
+    "LOG_LEVEL": "info"
+  }
+}
+```
+
+## Programmatic Configuration
+
+### Using McpConfig (Core)
+
+The `core` module provides a configuration builder:
+
+```rust
+use vllora_core::types::mcp::{McpConfig, McpServerConfig, McpServerType};
+use std::collections::HashMap;
+
+let mut config = McpConfig::new();
+
+// Add HTTP server
+let mut headers = HashMap::new();
+headers.insert("Authorization".to_string(), "Bearer token".to_string());
+
+let server = McpServerConfig::with_headers(
+    "https://api.example.com/mcp".to_string(),
+    headers,
+    McpServerType::Http,
+);
+
+config.add_server("example".to_string(), server);
+
+// Convert to MCP definitions
+let definitions = config.to_mcp_definitions();
+```
+
+### Using McpDefinition (LLM)
+
+The `llm` module provides the transport layer:
+
+```rust
+use vllora_llm::types::gateway::{McpDefinition, McpTransportType, ToolsFilter};
+use std::collections::HashMap;
+
+let definition = McpDefinition {
+    filter: ToolsFilter::All,
+    r#type: McpTransportType::Sse {
+        server_url: "https://mcp.deepwiki.com/sse".to_string(),
+        headers: HashMap::new(),
+        env: None,
+    },
+};
+```
+
+### Getting Tools
+
+Retrieve available tools from MCP servers:
+
+```rust
+use vllora_llm::mcp::get_tools;
+
+let definitions = vec![definition];
+let server_tools = get_tools(&definitions).await?;
+
+for server in server_tools {
+    println!("Server: {}", server.definition.server_name());
+    for tool in server.tools {
+        println!("  - {}: {}", tool.0.name, tool.0.description.unwrap_or_default());
+    }
+}
+```
+
+### Executing Tools
+
+Execute tools from MCP servers:
+
+```rust
+use vllora_llm::mcp::execute_mcp_tool;
+use std::collections::HashMap;
+
+let mut inputs = HashMap::new();
+inputs.insert("query".to_string(), serde_json::json!("Rust programming"));
+
+let result = execute_mcp_tool(
+    &definition,
+    &tool,
+    inputs,
+    None, // optional metadata
+).await?;
+
+println!("Result: {}", result);
+```
+
+## Configuration Examples
+
+### DeepWiki Public Server
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.deepwiki.com/sse",
+  "filter": "all"
+}
+```
+
+### Authenticated Private Server
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://mcp.devin.ai/sse",
+  "headers": {
+    "Authorization": "Bearer YOUR_API_KEY"
+  },
+  "filter": {
+    "selected": [
+      { "name": "search_web" },
+      { "name": "read_file" }
+    ]
+  }
+}
+```
+
+### Multiple Servers
+
+```json
+[
+  {
+    "type": "sse",
+    "server_url": "https://mcp.deepwiki.com/sse",
+    "filter": {
+      "selected": [{ "name": "search_.*" }]
+    }
+  },
+  {
+    "type": "http",
+    "server_url": "https://api.weather.com/mcp",
+    "headers": {
+      "X-API-Key": "weather-key"
+    },
+    "filter": {
+      "selected": [{ "name": "get_weather" }]
+    }
+  }
+]
+```
+
+## Error Handling
+
+vLLora provides detailed error types for MCP operations:
+
+- `InvalidServerName`: Server name validation failed
+- `ServerInitializeError`: Failed to initialize MCP server
+- `SseTransportError`: SSE connection error
+- `ClientInitializeError`: Client initialization failed
+- `ServiceError`: General MCP service error
+- `NoTextInToolResult`: Tool returned non-text content
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use SSE for streaming operations">
+    SSE provides better performance for operations that stream results, like web search or document analysis.
+  </Accordion>
+  
+  <Accordion title="Filter tools to reduce overhead">
+    Loading all tools from a server can be slow. Filter to only the tools you need.
+  </Accordion>
+  
+  <Accordion title="Store API keys securely">
+    Never hardcode API keys. Use environment variables or secret management systems.
+  </Accordion>
+  
+  <Accordion title="Validate headers before use">
+    Invalid header names or values will be silently skipped. Check logs for validation errors.
+  </Accordion>
+  
+  <Accordion title="Test with small tool sets first">
+    When connecting to a new MCP server, start with a small set of tools to verify the connection.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Explore Available MCP Servers" icon="server" href="/integration/mcp-servers">
+  See examples of popular MCP servers and how to use them
+</Card>

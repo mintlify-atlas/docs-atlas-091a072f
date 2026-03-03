@@ -1,0 +1,353 @@
+---
+title: 'TypeScript OpenAI SDK Example'
+description: 'Use vLLora with the OpenAI TypeScript SDK'
+---
+
+# TypeScript OpenAI SDK Example
+
+This example demonstrates how to use vLLora with the official OpenAI TypeScript SDK for seamless integration.
+
+## Installation
+
+Install the OpenAI SDK:
+
+```bash
+npm install openai
+# or
+yarn add openai
+# or
+pnpm add openai
+```
+
+## Basic Setup
+
+Configure the OpenAI client to use vLLora's endpoint:
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.VLLORA_API_KEY,
+  baseURL: 'https://api.vllora.ai/v1',
+});
+
+async function main() {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'What is vLLora?' }
+    ],
+  });
+
+  console.log(completion.choices[0].message.content);
+}
+
+main();
+```
+
+## Streaming Responses
+
+Get real-time streaming responses:
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.VLLORA_API_KEY,
+  baseURL: 'https://api.vllora.ai/v1',
+});
+
+async function streamChat() {
+  const stream = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Count from 1 to 20 in separate lines.' }
+    ],
+    stream: true,
+  });
+
+  console.log('Streaming response:');
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || '';
+    process.stdout.write(content);
+  }
+  console.log('\n');
+}
+
+streamChat();
+```
+
+## Multiple Provider Support
+
+Switch between different AI providers:
+
+```typescript
+import OpenAI from 'openai';
+
+type Provider = 'openai' | 'anthropic' | 'bedrock';
+
+interface ProviderConfig {
+  model: string;
+  apiKey: string;
+}
+
+class VlloraClient {
+  private client: OpenAI;
+  private providerConfigs: Record<Provider, ProviderConfig> = {
+    openai: {
+      model: 'gpt-4.1-mini',
+      apiKey: process.env.VLLORA_OPENAI_API_KEY || '',
+    },
+    anthropic: {
+      model: 'claude-opus-4-5-20251101',
+      apiKey: process.env.VLLORA_ANTHROPIC_API_KEY || '',
+    },
+    bedrock: {
+      model: 'anthropic.claude-v3-5-sonnet',
+      apiKey: process.env.VLLORA_BEDROCK_API_KEY || '',
+    },
+  };
+
+  constructor(provider: Provider = 'openai') {
+    const config = this.providerConfigs[provider];
+    this.client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: 'https://api.vllora.ai/v1',
+    });
+  }
+
+  async chat(messages: OpenAI.Chat.ChatCompletionMessageParam[]) {
+    return await this.client.chat.completions.create({
+      model: this.providerConfigs.openai.model,
+      messages,
+    });
+  }
+
+  async streamChat(messages: OpenAI.Chat.ChatCompletionMessageParam[]) {
+    return await this.client.chat.completions.create({
+      model: this.providerConfigs.openai.model,
+      messages,
+      stream: true,
+    });
+  }
+}
+
+// Usage
+async function example() {
+  // Use OpenAI
+  const openaiClient = new VlloraClient('openai');
+  const response1 = await openaiClient.chat([
+    { role: 'user', content: 'Hello from OpenAI!' }
+  ]);
+  console.log(response1.choices[0].message.content);
+
+  // Use Anthropic
+  const anthropicClient = new VlloraClient('anthropic');
+  const response2 = await anthropicClient.chat([
+    { role: 'user', content: 'Hello from Anthropic!' }
+  ]);
+  console.log(response2.choices[0].message.content);
+}
+
+example();
+```
+
+## Error Handling
+
+Implement robust error handling:
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.VLLORA_API_KEY,
+  baseURL: 'https://api.vllora.ai/v1',
+  maxRetries: 3,
+  timeout: 30000, // 30 seconds
+});
+
+async function chatWithErrorHandling() {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages: [
+        { role: 'user', content: 'Hello, vLLora!' }
+      ],
+    });
+
+    console.log(completion.choices[0].message.content);
+  } catch (error) {
+    if (error instanceof OpenAI.APIError) {
+      console.error('API Error:', {
+        status: error.status,
+        message: error.message,
+        code: error.code,
+      });
+    } else {
+      console.error('Unexpected error:', error);
+    }
+    throw error;
+  }
+}
+
+chatWithErrorHandling();
+```
+
+## Advanced: Function Calling
+
+Use function calling with vLLora:
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.VLLORA_API_KEY,
+  baseURL: 'https://api.vllora.ai/v1',
+});
+
+const tools: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Get the current weather for a location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'The city and state, e.g. San Francisco, CA',
+          },
+          unit: {
+            type: 'string',
+            enum: ['celsius', 'fahrenheit'],
+            description: 'The temperature unit',
+          },
+        },
+        required: ['location'],
+      },
+    },
+  },
+];
+
+async function functionCallingExample() {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'user', content: 'What\'s the weather in Boston?' },
+  ];
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    messages,
+    tools,
+    tool_choice: 'auto',
+  });
+
+  const toolCall = response.choices[0].message.tool_calls?.[0];
+  
+  if (toolCall && toolCall.function.name === 'get_weather') {
+    const args = JSON.parse(toolCall.function.arguments);
+    console.log('Function call:', {
+      name: toolCall.function.name,
+      arguments: args,
+    });
+
+    // Simulate weather API call
+    const weatherData = { temperature: 72, condition: 'sunny' };
+
+    // Send function result back to model
+    messages.push(response.choices[0].message);
+    messages.push({
+      role: 'tool',
+      content: JSON.stringify(weatherData),
+      tool_call_id: toolCall.id,
+    });
+
+    const finalResponse = await openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages,
+    });
+
+    console.log(finalResponse.choices[0].message.content);
+  }
+}
+
+functionCallingExample();
+```
+
+## Using with Next.js
+
+Integrate vLLora into a Next.js application:
+
+```typescript
+// app/api/chat/route.ts
+import OpenAI from 'openai';
+import { OpenAIStream, StreamingTextResponse } from 'ai';
+
+const openai = new OpenAI({
+  apiKey: process.env.VLLORA_API_KEY,
+  baseURL: 'https://api.vllora.ai/v1',
+});
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    stream: true,
+    messages,
+  });
+
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
+}
+```
+
+```typescript
+// app/page.tsx
+'use client';
+
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+  });
+
+  return (
+    <div>
+      <div>
+        {messages.map((m) => (
+          <div key={m.id}>
+            <strong>{m.role}:</strong> {m.content}
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Say something..."
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+```
+
+## Key Features
+
+- **OpenAI Compatible**: Drop-in replacement for OpenAI SDK
+- **Streaming Support**: Real-time response streaming
+- **Function Calling**: Use tools and function calling
+- **TypeScript Types**: Full type safety out of the box
+- **Multi-Provider**: Access multiple AI providers seamlessly
+
+## Next Steps
+
+- Try the [Python LangChain integration](/examples/python-langchain)
+- Explore [Rust streaming examples](/examples/rust-streaming)
+- Learn about [authentication](/api-reference/authentication)
+- Check out the [OpenAI SDK documentation](https://github.com/openai/openai-node)

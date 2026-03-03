@@ -1,0 +1,413 @@
+---
+title: 'Projects'
+description: 'Organizing AI workloads with vLLora projects'
+icon: 'folder-tree'
+---
+
+## Overview
+
+Projects in vLLora provide logical isolation and organization for your AI workloads. Each project has its own configuration, credentials, usage limits, and trace data, enabling multi-tenant deployments and clean separation of concerns.
+
+## Project Structure
+
+### Core Attributes
+
+From `core/src/types/metadata/project.rs`:
+
+```rust
+pub struct Project {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    pub company_id: Uuid,
+    pub slug: String,
+    pub settings: Option<ProjectSettings>,
+    pub is_default: bool,
+    pub archived_at: Option<NaiveDateTime>,
+    pub allowed_user_ids: Option<Vec<String>>,
+    pub private_model_prices: Option<Value>,
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Identification" icon="fingerprint">
+    UUID-based ID and URL-friendly slug for routing
+  </Card>
+  <Card title="Configuration" icon="gear">
+    Per-project settings and customizations
+  </Card>
+  <Card title="Access Control" icon="lock">
+    Optional user ID allowlist for multi-tenancy
+  </Card>
+  <Card title="Pricing" icon="dollar-sign">
+    Custom model pricing overrides
+  </Card>
+</CardGroup>
+
+## Project Settings
+
+Projects can be customized with various settings:
+
+```rust
+pub struct ProjectSettings {
+    // Rate limiting
+    pub rate_limit: Option<RateLimitConfig>,
+    
+    // Default routing strategy
+    pub routing_strategy: Option<RoutingStrategy>,
+    
+    // Model allowlist/denylist
+    pub allowed_models: Option<Vec<String>>,
+    pub denied_models: Option<Vec<String>>,
+    
+    // Guardrails configuration
+    pub guardrails: Option<GuardrailsConfig>,
+    
+    // Custom headers
+    pub default_headers: Option<HashMap<String, String>>,
+}
+```
+
+## Creating Projects
+
+### Via API
+
+Projects are created using the `NewProjectDTO`:
+
+```rust
+pub struct NewProjectDTO {
+    pub name: String,
+    pub description: Option<String>,
+    pub settings: Option<Value>,
+    pub private_model_prices: Option<HashMap<String, ModelPrice>>,
+    pub usage_limit: Option<Value>,
+}
+```
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:9090/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production",
+    "description": "Production AI workloads",
+    "settings": {
+      "routing_strategy": {
+        "type": "optimized",
+        "metric": "latency"
+      }
+    }
+  }'
+```
+
+```javascript JavaScript SDK
+const project = await vllora.projects.create({
+  name: 'Production',
+  description: 'Production AI workloads',
+  settings: {
+    routingStrategy: {
+      type: 'optimized',
+      metric: 'latency'
+    }
+  }
+});
+```
+</CodeGroup>
+
+### Automatic Slug Generation
+
+Project slugs are auto-generated from names:
+
+```rust
+fn slugify(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .chars()
+        .fold(String::new(), |mut acc, c| {
+            if !acc.ends_with('-') || c != '-' {
+                acc.push(c);
+            }
+            acc
+        })
+        .trim_matches('-')
+        .to_string()
+}
+```
+
+**Examples:**
+- `"My Project"` → `"my-project"`
+- `"Production 2024"` → `"production-2024"`
+- `"AI/ML Tasks"` → `"ai-ml-tasks"`
+
+## Default Project
+
+vLLora requires at least one default project:
+
+```rust
+pub struct ProjectServiceImpl {
+    db_pool: DbPool,
+}
+
+impl ProjectService for ProjectServiceImpl {
+    fn get_default(&self, _owner_id: Uuid) -> Result<Project, DatabaseError> {
+        let mut conn = self.db_pool.get()?;
+        DbProject::not_archived()
+            .filter(schema::projects::is_default.eq(1))
+            .first(&mut conn)
+            .map_err(DatabaseError::QueryError)
+            .map(|db_project| db_project.into())
+    }
+}
+```
+
+<Info>
+When vLLora starts, it automatically seeds a default project if none exists (`gateway/src/seed.rs`).
+</Info>
+
+## Project Resolution
+
+### Middleware
+
+The `ProjectMiddleware` resolves projects from requests:
+
+```rust
+// From gateway/src/middleware/project.rs
+impl ProjectMiddleware {
+    // Resolves project from:
+    // 1. X-Project-Id header (UUID)
+    // 2. X-Project-Slug header (slug)
+    // 3. Default project
+    pub fn resolve_project(&self, req: &HttpRequest) -> Result<Project, Error>
+}
+```
+
+### Request Headers
+
+Specify projects in your API calls:
+
+<Tabs>
+  <Tab title="By UUID">
+    ```bash
+    curl -X POST http://localhost:9090/v1/chat/completions \
+      -H "X-Project-Id: 123e4567-e89b-12d3-a456-426614174000" \
+      -H "Content-Type: application/json" \
+      -d '{...}'
+    ```
+  </Tab>
+  <Tab title="By Slug">
+    ```bash
+    curl -X POST http://localhost:9090/v1/chat/completions \
+      -H "X-Project-Slug: production" \
+      -H "Content-Type: application/json" \
+      -d '{...}'
+    ```
+  </Tab>
+  <Tab title="Default">
+    ```bash
+    # No header - uses default project
+    curl -X POST http://localhost:9090/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -d '{...}'
+    ```
+  </Tab>
+</Tabs>
+
+## Project Isolation
+
+### Credential Isolation
+
+Each project maintains its own provider credentials:
+
+```rust
+// Projects can have different API keys for the same provider
+project_a.credentials.openai = "sk-proj-abc..."
+project_b.credentials.openai = "sk-proj-xyz..."
+```
+
+This enables:
+- **Cost allocation**: Separate billing per project
+- **Rate limit isolation**: Different quotas per project
+- **Security**: Credential compromise limited to one project
+
+### Trace Isolation
+
+Traces are tagged with project IDs:
+
+```rust
+// From telemetry/src/lib.rs
+let project_id = attributes
+    .remove("vllora.project_id")
+    .and_then(|v| Some(v.as_str()?.to_owned()));
+```
+
+UI and queries automatically filter by project context.
+
+### Usage Tracking
+
+Usage metrics are tracked per project:
+
+```rust
+// Token usage, costs, and request counts
+pub struct ProjectUsage {
+    pub project_id: Uuid,
+    pub period: UsagePeriod,
+    pub total_tokens: u64,
+    pub total_cost: f64,
+    pub request_count: u64,
+}
+```
+
+## Special Projects
+
+### Lucy Project
+
+vLLora reserves a special project ID for internal use:
+
+```rust
+// From core/src/metadata/services/project.rs
+const LUCY_PROJECT_ID: &str = "123e4567-e89b-12d3-a456-426614174000";
+
+pub fn create_lucy_project(&self) -> Result<(), DatabaseError> {
+    let db_new_project = DbNewProject {
+        id: Some(LUCY_PROJECT_ID.to_string()),
+        name: "lucy".to_string(),
+        description: None,
+        slug: "lucy".to_string(),
+        settings: Some(settings_json),
+        is_default: Some(0),
+    };
+    // ...
+}
+```
+
+<Warning>
+The Lucy project is reserved for vLLora's internal operations. Do not modify or delete it.
+</Warning>
+
+## Project Management
+
+### Listing Projects
+
+```rust
+fn list(&self, owner_id: Uuid) -> Result<Vec<Project>, DatabaseError> {
+    let mut conn = self.db_pool.get()?;
+    DbProject::not_archived()
+        .load(&mut conn)
+        .map_err(DatabaseError::QueryError)
+        .map(|projects| projects.into_iter().map(Into::into).collect())
+}
+```
+
+### Updating Projects
+
+```rust
+pub struct UpdateProjectDTO {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub settings: Option<Value>,
+    pub archived: Option<bool>,
+}
+
+fn update(
+    &self,
+    id: Uuid,
+    update: UpdateProjectDTO,
+    _owner_id: Uuid,
+) -> Result<Project, DatabaseError>
+```
+
+### Archiving Projects
+
+Projects are soft-deleted via archiving:
+
+```rust
+DbProject::not_archived()
+    .filter(schema::projects::archived_at.is_null())
+```
+
+Archived projects are hidden from lists but data is preserved.
+
+## Multi-Tenancy
+
+### User Allowlists
+
+Restrict project access to specific users:
+
+```rust
+pub allowed_user_ids: Option<Vec<String>>
+```
+
+The gateway checks this list before allowing access:
+
+```rust
+if let Some(allowed_users) = &project.allowed_user_ids {
+    if !allowed_users.contains(&user_id) {
+        return Err(Error::Unauthorized);
+    }
+}
+```
+
+### Company Isolation
+
+All projects belong to a company:
+
+```rust
+pub company_id: Uuid
+```
+
+This enables:
+- Organization-level grouping
+- Cross-project analytics
+- Hierarchical access control
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Environment Separation">
+    Create separate projects for development, staging, and production:
+    ```
+    - dev-project
+    - staging-project
+    - production-project
+    ```
+    Each with its own credentials and settings.
+  </Accordion>
+  
+  <Accordion title="Team Isolation">
+    Use projects to isolate different teams or products:
+    ```
+    - team-alpha-chatbot
+    - team-beta-analytics
+    - product-search
+    ```
+  </Accordion>
+  
+  <Accordion title="Cost Tracking">
+    Leverage project-level usage tracking for chargeback:
+    ```
+    - client-a-project
+    - client-b-project
+    - internal-research
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom Pricing">
+    Override model prices per project for accurate cost allocation:
+    ```rust
+    private_model_prices: Some({
+      "gpt-4": ModelPrice::Completion(CompletionModelPrice {
+        per_input_token: 0.03,
+        per_output_token: 0.06,
+      })
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Use descriptive project names and slugs for easier identification in traces and logs.
+</Tip>

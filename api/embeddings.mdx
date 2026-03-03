@@ -1,0 +1,343 @@
+---
+title: Embeddings
+description: POST /v1/embeddings - Create text embeddings for semantic search and analysis
+---
+
+Generate embeddings (vector representations) of text for use in semantic search, clustering, recommendations, and other machine learning tasks.
+
+## Endpoint
+
+```
+POST /v1/embeddings
+```
+
+## Request Body
+
+<ParamField body="model" type="string" required>
+  The embedding model to use. Can be:
+  - Model name: `text-embedding-ada-002`
+  - Provider/model: `openai/text-embedding-ada-002`
+  - Provider/model@version: `openai/text-embedding-3-small@latest`
+  
+  Supported providers:
+  - OpenAI: `text-embedding-ada-002`, `text-embedding-3-small`, `text-embedding-3-large`
+  - Google: Gemini embedding models
+  - AWS Bedrock: Titan and Cohere embedding models
+  - Azure: OpenAI embedding models
+</ParamField>
+
+<ParamField body="input" type="string | array" required>
+  The text or array of texts to embed. Can be:
+  - Single string: `"The quick brown fox"`
+  - Array of strings: `["Text 1", "Text 2", "Text 3"]`
+  
+  For batch processing, provide multiple texts in an array. The API will return embeddings in the same order.
+</ParamField>
+
+<ParamField body="user" type="string">
+  Unique identifier for the end-user, useful for monitoring and abuse detection.
+</ParamField>
+
+<ParamField body="dimensions" type="integer">
+  Number of dimensions for the output embeddings (when supported by the model).
+  
+  For example, `text-embedding-3-small` supports dimensions from 512 to 1536.
+</ParamField>
+
+<ParamField body="encoding_format" type="string">
+  Format for the embedding data. Options:
+  - `"float"` (default): Array of floating-point numbers
+  - `"base64"`: Base64-encoded string (more efficient for large batches)
+</ParamField>
+
+## Response
+
+<ResponseField name="object" type="string">
+  Always `"list"`.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of embedding objects, one for each input text.
+  
+  Each embedding contains:
+  - `object` (string): Always `"embedding"`
+  - `embedding` (array | string): The embedding vector
+    - Float format: Array of numbers `[0.123, -0.456, ...]`
+    - Base64 format: Base64-encoded string
+  - `index` (integer): Position in the input array
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model that generated the embeddings.
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token usage statistics.
+  
+  - `prompt_tokens` (integer): Number of tokens in the input
+  - `total_tokens` (integer): Total tokens processed
+  - `cost` (number): Estimated cost of the request
+</ResponseField>
+
+## Examples
+
+### Single Text Embedding
+
+```bash
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "text-embedding-ada-002",
+    "input": "The quick brown fox jumps over the lazy dog"
+  }'
+```
+
+Response:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [
+        0.0023064255,
+        -0.009327292,
+        -0.0028842222,
+        // ... (1536 dimensions for ada-002)
+      ],
+      "index": 0
+    }
+  ],
+  "model": "text-embedding-ada-002",
+  "usage": {
+    "prompt_tokens": 9,
+    "total_tokens": 9,
+    "cost": 0.000001
+  }
+}
+```
+
+### Batch Embedding
+
+```bash
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": [
+      "First document about machine learning",
+      "Second document about natural language processing",
+      "Third document about computer vision"
+    ]
+  }'
+```
+
+Response:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.012, -0.034, ...],
+      "index": 0
+    },
+    {
+      "object": "embedding",
+      "embedding": [0.056, -0.078, ...],
+      "index": 1
+    },
+    {
+      "object": "embedding",
+      "embedding": [0.091, -0.023, ...],
+      "index": 2
+    }
+  ],
+  "model": "text-embedding-3-small",
+  "usage": {
+    "prompt_tokens": 27,
+    "total_tokens": 27,
+    "cost": 0.000005
+  }
+}
+```
+
+### Custom Dimensions
+
+```bash
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": "Reduce dimensionality for faster search",
+    "dimensions": 512
+  }'
+```
+
+### Base64 Encoding
+
+```bash
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "text-embedding-ada-002",
+    "input": [
+      "Document 1",
+      "Document 2",
+      "Document 3"
+    ],
+    "encoding_format": "base64"
+  }'
+```
+
+Response with base64 encoding:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": "AAAAAAAA8D8AAAAAAADwPw==",
+      "index": 0
+    }
+  ],
+  "model": "text-embedding-ada-002",
+  "usage": {
+    "prompt_tokens": 6,
+    "total_tokens": 6,
+    "cost": 0.000001
+  }
+}
+```
+
+### Using Different Providers
+
+```bash
+# OpenAI
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "openai/text-embedding-3-large",
+    "input": "Document about artificial intelligence"
+  }'
+
+# Google Gemini
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "google/text-embedding-004",
+    "input": "Document about artificial intelligence"
+  }'
+
+# AWS Bedrock
+curl -X POST https://your-gateway-url/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "bedrock/amazon.titan-embed-text-v1",
+    "input": "Document about artificial intelligence"
+  }'
+```
+
+## Response Headers
+
+The Gateway adds custom headers to track model routing:
+
+- `X-Model-Name`: The actual embedding model that processed the request
+- `X-Provider-Name`: The provider that served the request
+
+## Use Cases
+
+### Semantic Search
+
+Embed your document corpus and user queries to find semantically similar content:
+
+1. Embed all documents and store vectors in a vector database
+2. Embed user search query
+3. Find documents with highest cosine similarity to query embedding
+
+### Clustering
+
+Group similar texts together:
+
+1. Generate embeddings for all texts
+2. Apply clustering algorithm (k-means, DBSCAN, etc.)
+3. Identify clusters of related content
+
+### Recommendations
+
+Find similar items based on text descriptions:
+
+1. Embed item descriptions
+2. For a given item, find items with similar embeddings
+3. Recommend top-k most similar items
+
+### Classification
+
+Train classifiers using embeddings as features:
+
+1. Generate embeddings for labeled training data
+2. Train classifier (logistic regression, SVM, etc.)
+3. Use embeddings of new text to predict class
+
+## Best Practices
+
+### Batch Processing
+
+For better performance and lower latency, batch multiple texts in a single request:
+
+```json
+{
+  "model": "text-embedding-ada-002",
+  "input": ["text1", "text2", "text3", ...]
+}
+```
+
+### Normalize Embeddings
+
+For cosine similarity search, normalize embeddings to unit length:
+
+```python
+import numpy as np
+
+def normalize(embedding):
+    return embedding / np.linalg.norm(embedding)
+```
+
+### Cache Embeddings
+
+Embeddings for the same text are deterministic. Cache them to avoid redundant API calls:
+
+```python
+cache = {}
+
+def get_embedding(text, model):
+    key = f"{model}:{text}"
+    if key not in cache:
+        cache[key] = api.create_embedding(model, text)
+    return cache[key]
+```
+
+## Pricing
+
+Embedding costs vary by model and provider. The `usage.cost` field in the response provides an estimate.
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Learn about the Gateway API
+  </Card>
+  <Card title="Chat Completions" icon="comments" href="/api/chat-completions">
+    Generate conversational responses
+  </Card>
+</CardGroup>

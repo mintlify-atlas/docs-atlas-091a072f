@@ -1,0 +1,375 @@
+---
+title: 'Configuration'
+description: 'Configure vLLora with config.yaml and environment variables'
+---
+
+## Overview
+
+vLLora can be configured using a YAML configuration file and environment variables. Configuration file settings can be overridden by CLI arguments for flexibility.
+
+## Configuration File
+
+### Location
+
+By default, vLLora looks for `config.yaml` in the current working directory. You can specify a custom location:
+
+```bash
+vllora --config /path/to/custom-config.yaml
+```
+
+### Basic Configuration
+
+Create a `config.yaml` file:
+
+```yaml
+http:
+  host: "0.0.0.0"
+  port: 9090
+  cors_allowed_origins:
+    - "*"
+
+ui:
+  port: 9091
+  open_on_startup: true
+
+otel:
+  host: "[::]"
+  port: 4317
+
+distri:
+  port: 8081
+```
+
+## Configuration Sections
+
+### HTTP Server Configuration
+
+Controls the main API server:
+
+```yaml
+http:
+  host: "0.0.0.0"              # Bind address (0.0.0.0 = all interfaces)
+  port: 9090                    # API server port
+  cors_allowed_origins:         # CORS origins
+    - "http://localhost:3000"
+    - "https://app.example.com"
+```
+
+**Default values:**
+- `host`: `"0.0.0.0"`
+- `port`: `9090`
+- `cors_allowed_origins`: `["*"]`
+
+**CLI Overrides:**
+```bash
+vllora --host 127.0.0.1 --port 8080 --cors-origins "http://localhost:3000,https://app.example.com"
+```
+
+### UI Configuration
+
+Controls the web UI server:
+
+```yaml
+ui:
+  port: 9091                    # UI server port
+  open_on_startup: true         # Auto-open browser on startup
+```
+
+**Default values:**
+- `port`: `9091`
+- `open_on_startup`: `true`
+
+**CLI Overrides:**
+```bash
+vllora --ui-port 8084 --open-ui-on-startup false
+```
+
+### OpenTelemetry (OTEL) Configuration
+
+Controls the OTLP gRPC collector:
+
+```yaml
+otel:
+  host: "[::]"                  # IPv6 bind address
+  port: 4317                    # OTLP gRPC port (standard)
+```
+
+**Default values:**
+- `host`: `"[::]"` (all interfaces, IPv6)
+- `port`: `4317`
+
+**CLI Override:**
+```bash
+vllora --otel-port 4318
+```
+
+### Distri Configuration
+
+Controls the Distri AI agent server:
+
+```yaml
+distri:
+  port: 8081                    # Distri server port
+```
+
+**Default values:**
+- `port`: `8081`
+
+**CLI Override:**
+```bash
+vllora --distri-port 8082
+```
+
+## Advanced Configuration
+
+### Provider Configuration
+
+You can optionally configure AI providers in the config file (though the UI is recommended):
+
+```yaml
+providers:
+  openai:
+    endpoint: "https://api.openai.com/v1"
+  anthropic:
+    endpoint: "https://api.anthropic.com/v1"
+  custom-provider:
+    endpoint: "https://api.custom.com/v1"
+    api_type: "openai"  # openai, anthropic, gemini, bedrock
+```
+
+<Note>
+  Provider API keys should be configured through the UI (`http://localhost:9091`) or the API, not in the config file.
+</Note>
+
+### Guardrails Configuration
+
+Configure input/output guardrails for LLM safety:
+
+```yaml
+guards:
+  toxicity-filter:
+    type: "llm_judge"
+    guard_type: "output"
+    model: "gpt-4o-mini"
+    prompt: "Evaluate if the following content is toxic or harmful"
+    
+  schema-validator:
+    type: "schema"
+    guard_type: "output"
+    schema:
+      type: "object"
+      properties:
+        response:
+          type: "string"
+      required:
+        - "response"
+```
+
+**Guard Types:**
+- `schema` - JSON schema validation
+- `llm_judge` - Use an LLM to evaluate content
+- `dataset` - Semantic similarity to a dataset
+
+**Guard Placement:**
+- `input` - Validate before sending to LLM
+- `output` - Validate LLM responses
+
+See the [Guardrails documentation](https://github.com/vllora/vllora/tree/main/guardrails) for more details.
+
+## Environment Variable Substitution
+
+vLLora supports Jinja2-style variable substitution in the config file:
+
+```yaml
+http:
+  host: "{{ HOST }}"
+  port: {{ PORT }}
+  
+providers:
+  openai:
+    endpoint: "{{ OPENAI_ENDPOINT }}"
+```
+
+Then set environment variables:
+
+```bash
+export HOST="0.0.0.0"
+export PORT=9090
+export OPENAI_ENDPOINT="https://api.openai.com/v1"
+vllora
+```
+
+Variables are resolved at startup. If an environment variable is not set, it's treated as an empty string.
+
+## Environment Variables
+
+### Application Environment Variables
+
+```bash
+# Logging configuration
+export RUST_LOG=info           # trace, debug, info, warn, error
+export ANSI_OUTPUT=true        # Enable/disable colored output
+
+# Database location
+export HOME=/var/lib/vllora    # vLLora stores data in $HOME/.vllora/
+
+# LangDB API (for model/provider sync)
+export LANGDB_API_URL=https://langdb.ai/v1
+
+# Rust runtime
+export RUST_BACKTRACE=1        # Enable backtraces for debugging
+```
+
+### Provider API Keys
+
+API keys are managed per-project through the UI or API. They are stored securely in the database.
+
+## Configuration Priority
+
+vLLora applies configuration in the following order (later overrides earlier):
+
+1. **Default values** (hardcoded in the application)
+2. **Configuration file** (`config.yaml`)
+3. **Environment variables** (via Jinja2 substitution in config)
+4. **CLI arguments** (highest priority)
+
+**Example:**
+
+```bash
+# config.yaml has port: 9090
+# CLI override takes precedence:
+vllora --config config.yaml --port 8080  # Final port: 8080
+```
+
+## CLI Commands
+
+Beyond the `serve` command (default), vLLora supports several utility commands:
+
+### List Models
+
+```bash
+vllora list
+```
+
+Lists all available models from the database.
+
+### Sync Models and Providers
+
+```bash
+# Sync both models and providers from LangDB API
+vllora sync
+
+# Sync only models
+vllora sync --models
+
+# Sync only providers
+vllora sync --providers
+```
+
+### View Traces
+
+```bash
+# List all traces
+vllora traces list
+
+# Show trace overview
+vllora traces overview
+
+# Show specific run info
+vllora traces run-info <run_id>
+
+# Show specific call info
+vllora traces call-info <call_id>
+```
+
+## Configuration Examples
+
+### Development Setup
+
+```yaml
+http:
+  host: "127.0.0.1"  # Local only
+  port: 9090
+  cors_allowed_origins:
+    - "*"  # Allow all origins
+
+ui:
+  port: 9091
+  open_on_startup: true  # Auto-open browser
+```
+
+### Production Setup
+
+```yaml
+http:
+  host: "0.0.0.0"  # All interfaces
+  port: 9090
+  cors_allowed_origins:
+    - "https://app.example.com"
+    - "https://admin.example.com"
+
+ui:
+  port: 9091
+  open_on_startup: false  # Don't open browser
+
+otel:
+  host: "127.0.0.1"  # Internal only
+  port: 4317
+```
+
+### Behind Reverse Proxy
+
+```yaml
+http:
+  host: "127.0.0.1"  # Bind to localhost only
+  port: 9090
+  cors_allowed_origins:
+    - "https://yourdomain.com"
+
+ui:
+  port: 9091
+  open_on_startup: false
+```
+
+Configure your reverse proxy (nginx, Caddy, etc.) to forward to `127.0.0.1:9090` and `127.0.0.1:9091`.
+
+## Validation
+
+vLLora validates configuration at startup. Common errors:
+
+**Invalid YAML syntax:**
+```
+Failed to parse config file. Error: invalid type: string "true", expected a boolean
+```
+
+**Port conflicts:**
+```
+Address already in use (os error 48)
+```
+
+Solution: Change the port or stop the conflicting service.
+
+## Best Practices
+
+1. **Use environment variables** for sensitive data and deployment-specific values
+2. **Use config files** for static configuration and defaults
+3. **Use CLI arguments** for temporary overrides and testing
+4. **Version control** your `config.yaml` but exclude sensitive data
+5. **Document** any custom configuration for your team
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Keys" icon="key" href="/guides/api-keys">
+    Configure provider API keys
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Set up observability
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/deployment">
+    Deploy to production
+  </Card>
+  <Card title="Guardrails" icon="shield" href="/essentials/guardrails">
+    Configure safety guardrails
+  </Card>
+</CardGroup>

@@ -1,0 +1,426 @@
+---
+title: 'Streaming Responses'
+description: 'Stream LLM responses in real-time with the Rust SDK'
+---
+
+The vllora_llm SDK supports streaming responses from LLM providers, allowing you to process tokens as they arrive.
+
+## Basic Streaming
+
+Use the `create_stream()` method to get a streaming response:
+
+```rust
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+use tokio_stream::StreamExt;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content("Tell me a story about Rust.")
+                .build()?,
+        )])
+        .build()?;
+
+    let client = VlloraLLMClient::new();
+    let mut stream = client.completions().create_stream(request).await?;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        for choice in chunk.choices {
+            if let Some(content) = choice.delta.content {
+                print!("{}", content);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Stream Processing
+
+### ResultStream Type
+
+The `create_stream()` method returns a `ResultStream`, defined in `llm/src/client/completions/response_stream.rs`:
+
+```rust
+pub struct ResultStream {
+    inner: Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk, LLMError>> + Send + 'static>>,
+}
+```
+
+It implements the `Stream` trait from `futures`, so you can use all standard stream methods.
+
+### Processing Chunks
+
+Each chunk contains choices with delta updates:
+
+```rust
+use tokio_stream::StreamExt;
+
+let mut stream = client.completions().create_stream(request).await?;
+
+while let Some(result) = stream.next().await {
+    match result {
+        Ok(chunk) => {
+            for choice in chunk.choices {
+                // Text content
+                if let Some(content) = choice.delta.content {
+                    print!("{}", content);
+                }
+
+                // Tool calls
+                if let Some(tool_calls) = choice.delta.tool_calls {
+                    for tool_call in tool_calls {
+                        println!("Tool: {}", tool_call.function.name);
+                    }
+                }
+
+                // Finish reason
+                if let Some(reason) = choice.finish_reason {
+                    println!("\nFinished: {}", reason);
+                }
+            }
+        }
+        Err(e) => eprintln!("Stream error: {}", e),
+    }
+}
+```
+
+### Collecting Full Response
+
+You can collect the full response from the stream:
+
+```rust
+use tokio_stream::StreamExt;
+
+let mut stream = client.completions().create_stream(request).await?;
+let mut full_text = String::new();
+
+while let Some(chunk) = stream.next().await {
+    let chunk = chunk?;
+    for choice in chunk.choices {
+        if let Some(content) = choice.delta.content {
+            full_text.push_str(&content);
+        }
+    }
+}
+
+println!("Complete response: {}", full_text);
+```
+
+## Complete Example
+
+From `llm/examples/openai/src/main.rs`:
+
+```rust llm/examples/openai/src/main.rs
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use tokio_stream::StreamExt;
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    let openai_req = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([
+            ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a helpful assistant.")
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Stream numbers 1 to 20 in separate lines.")
+                    .build()?,
+            ),
+        ])
+        .build()?;
+
+    let client = VlloraLLMClient::new();
+    let mut stream = client
+        .completions()
+        .create_stream(openai_req)
+        .await?;
+
+    println!("Streaming response...");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        for choice in chunk.choices {
+            if let Some(delta) = choice.delta.content {
+                print!("{}", delta);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Anthropic Streaming Example
+
+From `llm/examples/anthropic/src/main.rs`:
+
+```rust llm/examples/anthropic/src/main.rs
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use tokio_stream::StreamExt;
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
+use vllora_llm::types::provider::InferenceModelProvider;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("claude-opus-4-5-20251101")
+        .messages([
+            ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a helpful assistant that streams responses.")
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Stream numbers 1 to 10, one per line.")
+                    .build()?,
+            ),
+        ])
+        .build()?;
+
+    let client = VlloraLLMClient::new()
+        .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+            api_key: std::env::var("VLLORA_ANTHROPIC_API_KEY")
+                .expect("VLLORA_ANTHROPIC_API_KEY must be set"),
+        }))
+        .with_model_provider(InferenceModelProvider::Anthropic);
+
+    let mut stream = client
+        .completions()
+        .create_stream(request)
+        .await?;
+
+    println!("Streaming Anthropic response...");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        for choice in chunk.choices {
+            if let Some(delta) = choice.delta.content {
+                print!("{}", delta);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Advanced Stream Processing
+
+### Filtering Chunks
+
+Use stream combinators to filter chunks:
+
+```rust
+use tokio_stream::StreamExt;
+
+let mut stream = client
+    .completions()
+    .create_stream(request)
+    .await?
+    .filter_map(|result| {
+        match result {
+            Ok(chunk) if !chunk.choices.is_empty() => Some(chunk),
+            _ => None,
+        }
+    });
+
+while let Some(chunk) = stream.next().await {
+    // Process filtered chunks
+}
+```
+
+### Timeout Handling
+
+Add timeouts to stream processing:
+
+```rust
+use tokio::time::{timeout, Duration};
+use tokio_stream::StreamExt;
+
+let mut stream = client.completions().create_stream(request).await?;
+
+loop {
+    match timeout(Duration::from_secs(30), stream.next()).await {
+        Ok(Some(Ok(chunk))) => {
+            // Process chunk
+            for choice in chunk.choices {
+                if let Some(content) = choice.delta.content {
+                    print!("{}", content);
+                }
+            }
+        }
+        Ok(Some(Err(e))) => {
+            eprintln!("Stream error: {}", e);
+            break;
+        }
+        Ok(None) => break, // Stream ended
+        Err(_) => {
+            eprintln!("Stream timeout");
+            break;
+        }
+    }
+}
+```
+
+### Buffering Chunks
+
+Buffer chunks before processing:
+
+```rust
+use tokio_stream::StreamExt;
+
+let mut stream = client
+    .completions()
+    .create_stream(request)
+    .await?
+    .chunks_timeout(10, Duration::from_millis(100));
+
+while let Some(chunks) = stream.next().await {
+    let mut batch_text = String::new();
+    for chunk_result in chunks {
+        if let Ok(chunk) = chunk_result {
+            for choice in chunk.choices {
+                if let Some(content) = choice.delta.content {
+                    batch_text.push_str(&content);
+                }
+            }
+        }
+    }
+    println!("Batch: {}", batch_text);
+}
+```
+
+## Usage Tracking
+
+Some providers include usage information in the final chunk:
+
+```rust
+while let Some(chunk) = stream.next().await {
+    let chunk = chunk?;
+    
+    // Check for usage information
+    if let Some(usage) = chunk.usage {
+        println!("Tokens used:");
+        println!("  Input: {}", usage.prompt_tokens);
+        println!("  Output: {}", usage.completion_tokens);
+        println!("  Total: {}", usage.total_tokens);
+    }
+    
+    // Process content
+    for choice in chunk.choices {
+        if let Some(content) = choice.delta.content {
+            print!("{}", content);
+        }
+    }
+}
+```
+
+## Error Handling
+
+Handle stream errors gracefully:
+
+```rust
+use vllora_llm::error::LLMError;
+use tokio_stream::StreamExt;
+
+let mut stream = client.completions().create_stream(request).await?;
+
+while let Some(result) = stream.next().await {
+    match result {
+        Ok(chunk) => {
+            for choice in chunk.choices {
+                if let Some(content) = choice.delta.content {
+                    print!("{}", content);
+                }
+            }
+        }
+        Err(LLMError::ReqwestError(e)) => {
+            eprintln!("Network error: {}", e);
+            break;
+        }
+        Err(LLMError::ParseError(e)) => {
+            eprintln!("Parse error: {}", e);
+            // Continue or break depending on your needs
+        }
+        Err(e) => {
+            eprintln!("Stream error: {}", e);
+            break;
+        }
+    }
+}
+```
+
+## Type Reference
+
+### ChatCompletionChunk
+
+```rust
+pub struct ChatCompletionChunk {
+    pub id: String,
+    pub object: String,
+    pub created: i64,
+    pub model: String,
+    pub choices: Vec<ChatCompletionChunkChoice>,
+    pub usage: Option<ChatCompletionUsage>,
+}
+```
+
+### ChatCompletionChunkChoice
+
+```rust
+pub struct ChatCompletionChunkChoice {
+    pub index: i32,
+    pub delta: ChatCompletionDelta,
+    pub finish_reason: Option<String>,
+    pub logprobs: Option<ChatChoiceLogprobs>,
+}
+```
+
+### ChatCompletionDelta
+
+```rust
+pub struct ChatCompletionDelta {
+    pub role: Option<String>,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Completions API" icon="message" href="/sdk/completions">
+    Learn about non-streaming completions
+  </Card>
+  <Card title="Client Configuration" icon="wrench" href="/sdk/client">
+    Configure the VlloraLLMClient
+  </Card>
+</CardGroup>

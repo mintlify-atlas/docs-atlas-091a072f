@@ -1,0 +1,480 @@
+---
+title: 'Monitoring & Observability'
+description: 'Monitor vLLora performance, traces, and metrics'
+---
+
+## Overview
+
+vLLora provides comprehensive monitoring and observability features built on OpenTelemetry standards. This guide covers how to monitor your AI applications, collect metrics, and analyze traces.
+
+## Architecture
+
+vLLora's monitoring stack includes:
+
+- **OpenTelemetry (OTLP) Collector** - Receives traces and metrics via gRPC
+- **SQLite Storage** - Stores traces and metrics locally
+- **Real-time UI** - Live trace visualization
+- **REST API** - Query traces, spans, and metrics programmatically
+
+## Tracing
+
+### Automatic Trace Collection
+
+vLLora automatically captures traces for all LLM interactions:
+
+```bash
+curl -X POST http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+This automatically creates a trace with:
+- Request/response data
+- Model used
+- Token counts
+- Latency
+- Cost estimation
+- Provider information
+
+### Viewing Traces
+
+#### Web UI
+
+Open `http://localhost:9091` and navigate to **Traces** to see:
+
+- Live trace feed
+- Span waterfall visualization
+- Token usage and costs
+- Request/response inspection
+- Error tracking
+
+#### REST API
+
+List all traces:
+
+```bash
+curl http://localhost:9090/traces
+```
+
+**Response:**
+```json
+{
+  "traces": [
+    {
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "created_at": "2024-03-03T10:00:00Z",
+      "project_id": "default",
+      "spans_count": 3
+    }
+  ]
+}
+```
+
+Get spans for a specific run:
+
+```bash
+curl http://localhost:9090/runs/{run_id}
+```
+
+### Trace Context
+
+vLLora supports distributed tracing with baggage propagation:
+
+**Baggage Keys:**
+- `vllora.run_id` - Unique identifier for a run
+- `vllora.thread_id` - Thread identifier for conversations
+- `vllora.label` - Custom label for grouping
+- `vllora.tenant` - Multi-tenancy support
+- `vllora.project_id` - Project identifier
+
+**Example with custom context:**
+
+```bash
+curl -X POST http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "vllora-label: production-chatbot" \
+  -H "vllora-thread-id: user-123-session-456" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+This groups related requests together in the UI.
+
+## Metrics
+
+### OpenTelemetry Metrics
+
+vLLora exports metrics via OTLP gRPC on port `4317` by default.
+
+**Metric Types:**
+- **Counters** - Total requests, tokens, errors
+- **Histograms** - Latency distributions
+- **Gauges** - Active requests, queue depth
+
+### Metrics Storage
+
+Metrics are stored in SQLite at `~/.vllora/vllora.db` with:
+
+- 10-second export interval
+- Automatic aggregation
+- Project-based partitioning
+
+### Querying Metrics
+
+Metrics are accessible via the database or through the UI:
+
+```sql
+SELECT * FROM metrics 
+WHERE project_id = 'default' 
+AND timestamp > datetime('now', '-1 hour');
+```
+
+## Logging
+
+### Log Levels
+
+Configure logging via environment variables:
+
+```bash
+export RUST_LOG=info  # trace, debug, info, warn, error
+vllora
+```
+
+**Log Level Guide:**
+- `trace` - Very detailed debugging (not recommended for production)
+- `debug` - Detailed debugging information
+- `info` - General informational messages (default)
+- `warn` - Warning messages
+- `error` - Error messages only
+
+### Structured Logging
+
+vLLora uses structured logging with:
+
+- ISO 8601 timestamps
+- Log levels
+- Module names
+- Contextual information
+
+**Example output:**
+```
+2024-03-03T10:00:00.123Z  INFO vllora::http: HTTP server ready at: http://0.0.0.0:9090
+2024-03-03T10:00:01.456Z  INFO vllora::tracing: Metrics provider initialized successfully
+```
+
+### Disable Colors
+
+For log aggregation systems:
+
+```bash
+export ANSI_OUTPUT=false
+vllora
+```
+
+## OTLP Integration
+
+### Sending to External Collectors
+
+vLLora automatically exports traces and metrics to the built-in OTLP endpoint. To forward to external collectors:
+
+#### Jaeger
+
+```bash
+# Run Jaeger
+docker run -d --name jaeger \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  jaegertracing/all-in-one:latest
+
+# Configure vLLora to send to Jaeger
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+vllora
+```
+
+Access Jaeger UI at `http://localhost:16686`
+
+#### Grafana Tempo
+
+```yaml
+# tempo-config.yaml
+receiver:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+write_to:
+  - backend: local
+    path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+```
+
+```bash
+docker run -d --name tempo \
+  -p 4317:4317 \
+  -v $(pwd)/tempo-config.yaml:/etc/tempo.yaml \
+  grafana/tempo:latest -config.file=/etc/tempo.yaml
+```
+
+#### Prometheus + Grafana
+
+For metrics:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'vllora'
+    static_configs:
+      - targets: ['localhost:9090']
+```
+
+<Note>
+  vLLora uses OTLP push-based metrics. For Prometheus integration, consider using the OTLP receiver or OpenTelemetry Collector as a bridge.
+</Note>
+
+## Performance Monitoring
+
+### Key Metrics to Track
+
+1. **Request Rate** - Requests per second
+2. **Error Rate** - Failed requests percentage
+3. **Latency** - P50, P95, P99 response times
+4. **Token Usage** - Input/output tokens per request
+5. **Cost** - Estimated cost per request
+
+### Database Performance
+
+vLLora uses SQLite with:
+
+- Connection pool (size: 10)
+- WAL mode for concurrent access
+- Automatic schema migrations
+
+**Monitor database size:**
+
+```bash
+du -sh ~/.vllora/vllora.db
+```
+
+**Cleanup old traces:**
+
+```sql
+DELETE FROM spans 
+WHERE created_at < datetime('now', '-30 days');
+
+VACUUM;
+```
+
+### Health Checks
+
+Monitor vLLora availability:
+
+```bash
+# Check API health
+curl -f http://localhost:9090/v1/models || exit 1
+
+# Check UI health
+curl -f http://localhost:9091 || exit 1
+
+# Check OTLP collector
+grpcurl -plaintext localhost:4317 list
+```
+
+## Real-time Events
+
+### Server-Sent Events (SSE)
+
+vLLora supports real-time event streaming:
+
+```bash
+curl -N http://localhost:9090/events
+```
+
+**Event types:**
+- `trace.created` - New trace started
+- `trace.completed` - Trace finished
+- `span.created` - New span in trace
+- `breakpoint.hit` - Debug breakpoint hit
+
+**Example:**
+```json
+{
+  "event": "trace.created",
+  "data": {
+    "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+    "project_id": "default",
+    "timestamp": "2024-03-03T10:00:00Z"
+  }
+}
+```
+
+## CLI Trace Commands
+
+vLLora includes CLI commands for trace inspection:
+
+### List Traces
+
+```bash
+vllora traces list
+```
+
+### Trace Overview
+
+```bash
+vllora traces overview
+```
+
+Shows summary statistics:
+- Total traces
+- Success/error rates  
+- Average latency
+- Token usage
+
+### Run Details
+
+```bash
+vllora traces run-info <run_id>
+```
+
+Displays:
+- All spans in the run
+- Timing information
+- Input/output data
+- Costs
+
+### Call Details
+
+```bash
+vllora traces call-info <call_id>
+```
+
+Detailed information about a specific LLM call.
+
+## Debugging
+
+### Breakpoints
+
+vLLora supports interactive debugging:
+
+```bash
+# Enable global breakpoint
+curl -X POST http://localhost:9090/debug/global_breakpoint \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+When a breakpoint is hit:
+1. The request pauses
+2. You can inspect state in the UI
+3. Continue execution manually
+
+**Continue execution:**
+```bash
+curl -X POST http://localhost:9090/debug/continue \
+  -H "Content-Type: application/json" \
+  -d '{"run_id": "..."}'
+```
+
+**List active breakpoints:**
+```bash
+curl http://localhost:9090/debug/breakpoints
+```
+
+## Alerting
+
+vLLora doesn't include built-in alerting, but you can build alerts using:
+
+### Log-based Alerts
+
+Parse logs for errors:
+
+```bash
+tail -f /var/log/vllora.log | grep ERROR | \
+  while read line; do
+    echo "Alert: $line" | mail -s "vLLora Error" admin@example.com
+  done
+```
+
+### Metric-based Alerts
+
+Query the database periodically:
+
+```bash
+#!/bin/bash
+ERROR_RATE=$(sqlite3 ~/.vllora/vllora.db \
+  "SELECT COUNT(*) FROM spans WHERE status = 'error' AND created_at > datetime('now', '-5 minutes')")
+
+if [ $ERROR_RATE -gt 10 ]; then
+  echo "High error rate: $ERROR_RATE errors in 5 minutes"
+  # Send alert
+fi
+```
+
+### External Monitoring
+
+Use tools like:
+- **Prometheus** - Metrics collection and alerting
+- **Grafana** - Visualization and dashboards
+- **Sentry** - Error tracking (via custom integration)
+- **PagerDuty** - Incident management
+
+## Cost Tracking
+
+vLLora automatically estimates costs based on:
+
+- Token usage (input + output)
+- Model pricing
+- Provider rates
+
+**View costs in UI:**
+1. Navigate to **Traces**
+2. Select a trace
+3. See estimated cost per request
+
+**Query costs programmatically:**
+
+```sql
+SELECT 
+  DATE(created_at) as date,
+  SUM(estimated_cost) as total_cost,
+  COUNT(*) as request_count
+FROM spans
+WHERE project_id = 'default'
+GROUP BY DATE(created_at)
+ORDER BY date DESC
+LIMIT 30;
+```
+
+## Best Practices
+
+1. **Use labels** - Tag requests with labels for easier filtering
+2. **Set up retention** - Automatically delete old traces to manage database size
+3. **Monitor database** - Track `~/.vllora/vllora.db` size and performance
+4. **Enable structured logging** - Use `RUST_LOG` for appropriate verbosity
+5. **Export to external systems** - Forward OTLP data to Jaeger/Tempo for long-term storage
+6. **Regular backups** - Backup the SQLite database regularly
+7. **Use thread IDs** - Group related requests with thread IDs for conversation tracking
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure monitoring settings
+  </Card>
+  <Card title="Traces API" icon="route" href="/api/traces">
+    Query traces programmatically
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/deployment">
+    Production deployment guide
+  </Card>
+  <Card title="Debugging" icon="bug" href="/essentials/debugging">
+    Interactive debugging features
+  </Card>
+</CardGroup>

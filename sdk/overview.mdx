@@ -1,0 +1,114 @@
+---
+title: 'Rust SDK Overview'
+description: 'Get started with the vllora_llm Rust SDK for unified LLM access'
+---
+
+The `vllora_llm` SDK provides a unified interface for interacting with multiple LLM providers including OpenAI, Anthropic, Gemini, and AWS Bedrock.
+
+## Installation
+
+Add `vllora_llm` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vllora_llm = "0.1.23"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+```
+
+## Quick Start
+
+Here's a minimal example using OpenAI:
+
+```rust
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    // Build a request
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4.1-mini")
+        .messages([ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessageArgs::default()
+                .content("Hello, world!")
+                .build()?,
+        )])
+        .build()?;
+
+    // Create client and send request
+    let client = VlloraLLMClient::new();
+    let response = client.completions().create(request).await?;
+
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Response: {}", text);
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Core Components
+
+<CardGroup cols={2}>
+  <Card title="VlloraLLMClient" icon="cube" href="/sdk/client">
+    Learn how to configure and use the main client
+  </Card>
+  <Card title="Completions API" icon="message" href="/sdk/completions">
+    Send chat completion requests to LLMs
+  </Card>
+  <Card title="Streaming" icon="stream" href="/sdk/streaming">
+    Stream responses in real-time
+  </Card>
+</CardGroup>
+
+## Supported Providers
+
+The SDK supports multiple LLM providers through a unified interface:
+
+- **OpenAI** - GPT models (gpt-4, gpt-3.5-turbo, etc.)
+- **Anthropic** - Claude models (claude-opus, claude-sonnet, etc.)
+- **Google Gemini** - Gemini models
+- **AWS Bedrock** - Various models via Bedrock
+- **Custom Proxy** - Any OpenAI-compatible endpoint
+
+## Key Features
+
+- **Unified API**: Single interface across all providers
+- **Type Safety**: Full Rust type safety with builder patterns
+- **Async/Await**: Built on Tokio for high-performance async operations
+- **Streaming Support**: Real-time response streaming with `tokio-stream`
+- **Error Handling**: Comprehensive error types with `LLMResult<T>`
+- **Telemetry**: Built-in tracing support via `vllora_telemetry`
+
+## Error Handling
+
+All SDK operations return `LLMResult<T>`, which is an alias for `Result<T, LLMError>`:
+
+```rust
+use vllora_llm::error::{LLMResult, LLMError};
+
+match client.completions().create(request).await {
+    Ok(response) => println!("Success: {:?}", response),
+    Err(LLMError::InvalidCredentials) => eprintln!("Invalid API key"),
+    Err(e) => eprintln!("Error: {}", e),
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Client Configuration" icon="wrench" href="/sdk/client">
+    Learn about advanced client configuration options
+  </Card>
+  <Card title="Examples" icon="code" href="https://github.com/vllora/vllora/tree/main/llm/examples">
+    Explore complete examples in the repository
+  </Card>
+</CardGroup>

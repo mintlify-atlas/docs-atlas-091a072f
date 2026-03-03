@@ -1,0 +1,411 @@
+---
+title: 'Managing API Keys'
+description: 'Configure and manage API keys for AI providers in vLLora'
+---
+
+## Overview
+
+vLLora acts as a unified gateway to multiple AI providers. Each provider requires its own API credentials. This guide covers how to configure and manage API keys for different providers.
+
+## Supported Providers
+
+vLLora supports the following AI providers out of the box:
+
+### Tier 1 Providers (Built-in)
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="message-bot">
+    GPT-4, GPT-4o, GPT-4o-mini, and GPT-3.5 models
+  </Card>
+  <Card title="Anthropic" icon="brain">
+    Claude 3.5 Sonnet, Claude 3 Opus, and Haiku models
+  </Card>
+  <Card title="Google Gemini" icon="google">
+    Gemini Pro and Gemini Flash models
+  </Card>
+  <Card title="Amazon Bedrock" icon="aws">
+    Access to multiple foundation models via AWS
+  </Card>
+</CardGroup>
+
+### Additional Providers
+
+- **DeepSeek** - Advanced AI models
+- **xAI (Grok)** - X.ai models
+- **DeepInfra** - Cloud-hosted open models
+- **Fireworks AI** - Fast inference for compound AI
+- **Together AI** - Open-source model platform
+- **Azure OpenAI** - Microsoft Azure AI services
+- **Groq** - LPU-powered ultra-fast inference
+- **Mistral AI** - European AI leader
+- **OpenRouter** - Multi-model routing
+- **Parasail** - Cost-efficient AI deployment
+- **Vertex AI** - Google Cloud AI platform
+- **Z.AI (Zhipu)** - Chinese LLM provider
+
+## Configuring API Keys
+
+### Via Web UI (Recommended)
+
+1. Start vLLora:
+   ```bash
+   vllora
+   ```
+
+2. Open the UI at `http://localhost:9091`
+
+3. Navigate to **Providers** or **Settings**
+
+4. Select a provider and click **Configure**
+
+5. Enter your API key and save
+
+API keys are stored securely in the local SQLite database and are scoped to your current project.
+
+### Via REST API
+
+You can also manage API keys programmatically:
+
+#### List Providers
+
+```bash
+curl http://localhost:9090/providers
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "cbe839fa-87f5-4644-9f0c-df45a67237a6",
+    "name": "openai",
+    "description": "OpenAI develops advanced language models...",
+    "endpoint": null,
+    "has_credentials": false,
+    "is_custom": false
+  },
+  ...
+]
+```
+
+#### Add/Update Provider Credentials
+
+```bash
+curl -X PUT http://localhost:9090/providers/openai \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credentials": {
+      "api_key": "sk-..."
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "provider": {
+    "id": "cbe839fa-87f5-4644-9f0c-df45a67237a6",
+    "name": "openai",
+    "has_credentials": true
+  }
+}
+```
+
+#### Delete Provider Credentials
+
+```bash
+curl -X DELETE http://localhost:9090/providers/openai
+```
+
+## Provider-Specific Configuration
+
+### OpenAI
+
+**Get an API key:** [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+```json
+{
+  "credentials": {
+    "api_key": "sk-proj-..."
+  }
+}
+```
+
+**Available models:**
+- `gpt-4o` - Latest GPT-4 Omni model
+- `gpt-4o-mini` - Faster, cheaper GPT-4o
+- `gpt-4-turbo` - Previous generation GPT-4
+- `gpt-3.5-turbo` - Fast and cost-effective
+
+### Anthropic
+
+**Get an API key:** [console.anthropic.com](https://console.anthropic.com)
+
+```json
+{
+  "credentials": {
+    "api_key": "sk-ant-..."
+  }
+}
+```
+
+**Available models:**
+- `claude-3-5-sonnet-20241022` - Most capable Claude model
+- `claude-3-opus-20240229` - Highest intelligence
+- `claude-3-sonnet-20240229` - Balanced performance
+- `claude-3-haiku-20240307` - Fastest responses
+
+### Google Gemini
+
+**Get an API key:** [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+```json
+{
+  "credentials": {
+    "api_key": "AIza..."
+  }
+}
+```
+
+**Available models:**
+- `gemini-2.0-flash-exp` - Latest experimental flash
+- `gemini-1.5-pro` - Powerful and versatile
+- `gemini-1.5-flash` - Fast and efficient
+
+### Amazon Bedrock
+
+**AWS credentials required:**
+
+```json
+{
+  "credentials": {
+    "aws_access_key_id": "AKIA...",
+    "aws_secret_access_key": "...",
+    "aws_region": "us-east-1"
+  }
+}
+```
+
+**Available models:**
+- `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- `anthropic.claude-3-opus-20240229-v1:0`
+- `meta.llama3-70b-instruct-v1:0`
+- And many more via AWS Bedrock
+
+### Azure OpenAI
+
+**Azure-specific configuration:**
+
+```json
+{
+  "credentials": {
+    "api_key": "...",
+    "api_base": "https://YOUR_RESOURCE.openai.azure.com/",
+    "api_version": "2024-02-15-preview",
+    "deployment_name": "gpt-4"
+  }
+}
+```
+
+### Vertex AI (Google Cloud)
+
+**Service account required:**
+
+```json
+{
+  "credentials": {
+    "project_id": "your-project-id",
+    "credentials_json": "{...}",  // Service account JSON
+    "location": "us-central1"
+  }
+}
+```
+
+### OpenAI-Compatible Providers
+
+Many providers (DeepSeek, Groq, Fireworks, etc.) use the OpenAI API format:
+
+```json
+{
+  "credentials": {
+    "api_key": "..."
+  }
+}
+```
+
+The endpoint is pre-configured for each provider.
+
+## Custom Providers
+
+You can add custom OpenAI-compatible endpoints:
+
+### Create Custom Provider
+
+```bash
+curl -X POST http://localhost:9090/providers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider_name": "my-custom-llm",
+    "description": "My self-hosted LLM",
+    "endpoint": "https://llm.mycompany.com/v1",
+    "custom_inference_api_type": "openai",
+    "priority": 50
+  }'
+```
+
+**Supported API types:**
+- `openai` - OpenAI-compatible API
+- `anthropic` - Anthropic-compatible API
+- `gemini` - Google Gemini API
+- `bedrock` - AWS Bedrock API
+
+### Add Credentials to Custom Provider
+
+```bash
+curl -X PUT http://localhost:9090/providers/my-custom-llm \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credentials": {
+      "api_key": "..."
+    }
+  }'
+```
+
+### Delete Custom Provider
+
+```bash
+curl -X DELETE http://localhost:9090/providers/definitions/<provider_id>
+```
+
+<Warning>
+  Only custom providers (created via API) can be deleted. Built-in providers cannot be removed.
+</Warning>
+
+## Multi-Project Support
+
+vLLora supports multiple projects, each with its own API keys:
+
+```bash
+# List projects
+curl http://localhost:9090/projects
+
+# Create new project
+curl -X POST http://localhost:9090/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production",
+    "description": "Production environment"
+  }'
+```
+
+API keys are scoped per project. Configure different keys for development, staging, and production.
+
+## Security Best Practices
+
+### Storage
+
+- API keys are stored in the local SQLite database at `~/.vllora/vllora.db`
+- Keys are associated with projects and stored as encrypted credentials
+- The database is only accessible to the user running vLLora
+
+### Access Control
+
+- vLLora runs locally and does not expose credentials over the network
+- API keys are never logged or included in traces
+- Use project-based separation for different environments
+
+### Key Rotation
+
+1. Generate a new API key from your provider
+2. Update the key in vLLora (via UI or API)
+3. Test that requests work with the new key
+4. Revoke the old key from the provider's dashboard
+
+### Environment Separation
+
+For production deployments:
+
+```bash
+# Development
+vllora --config dev-config.yaml
+
+# Production (different database location)
+export HOME=/var/lib/vllora-prod
+vllora --config prod-config.yaml
+```
+
+This ensures complete separation of credentials between environments.
+
+## Syncing Providers
+
+vLLora can sync provider definitions from the LangDB API:
+
+```bash
+vllora sync --providers
+```
+
+This updates:
+- Provider metadata (descriptions, endpoints, etc.)
+- New providers added to LangDB
+- Deactivates providers removed from LangDB
+
+<Note>
+  Syncing providers does **not** affect your configured API keys. It only updates provider definitions.
+</Note>
+
+## Troubleshooting
+
+### Invalid API Key
+
+```json
+{
+  "error": "invalid_api_key",
+  "message": "The API key provided is invalid"
+}
+```
+
+**Solution:** Verify the API key is correct and has not expired.
+
+### Provider Not Found
+
+```json
+{
+  "error": "Provider not found"
+}
+```
+
+**Solution:** Run `vllora sync --providers` to update provider definitions.
+
+### Missing Credentials
+
+```json
+{
+  "error": "No credentials configured for provider: openai"
+}
+```
+
+**Solution:** Configure API key via UI or API before making requests.
+
+### Rate Limiting
+
+vLLora respects provider rate limits. If you hit rate limits:
+
+1. Configure multiple providers with fallback
+2. Use vLLora's built-in rate limiting middleware
+3. Upgrade your provider plan for higher limits
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Models" icon="database" href="/essentials/models">
+    Learn about model configuration
+  </Card>
+  <Card title="Chat Completions" icon="message" href="/api/chat-completions">
+    Make your first API request
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Monitor API usage and costs
+  </Card>
+  <Card title="Projects" icon="folder" href="/essentials/projects">
+    Manage multiple projects
+  </Card>
+</CardGroup>

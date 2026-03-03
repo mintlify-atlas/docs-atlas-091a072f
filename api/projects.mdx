@@ -1,0 +1,249 @@
+---
+title: Projects
+description: Manage projects and their configurations
+---
+
+Projects allow you to organize your AI workflows, traces, and runs. Each project can have its own settings, model prices, and configurations.
+
+## List Projects
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:3002/projects
+```
+
+```python Python
+import requests
+
+response = requests.get("http://localhost:3002/projects")
+projects = response.json()
+```
+</CodeGroup>
+
+<ResponseField name="projects" type="array">
+  Array of project objects
+  
+  <Expandable title="Project Object">
+    <ResponseField name="id" type="uuid" required>
+      Unique identifier for the project
+    </ResponseField>
+    
+    <ResponseField name="name" type="string" required>
+      Project name
+    </ResponseField>
+    
+    <ResponseField name="slug" type="string" required>
+      URL-friendly project identifier
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Optional project description
+    </ResponseField>
+    
+    <ResponseField name="is_default" type="boolean" required>
+      Whether this is the default project
+    </ResponseField>
+    
+    <ResponseField name="settings" type="object">
+      Project-specific settings and configurations
+    </ResponseField>
+    
+    <ResponseField name="private_model_prices" type="object">
+      Custom model pricing configurations
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="datetime" required>
+      Project creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="datetime" required>
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Create Project
+
+Create a new project with custom settings.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3002/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production",
+    "description": "Production environment project",
+    "settings": {
+      "max_tokens": 4096
+    }
+  }'
+```
+
+```python Python
+import requests
+
+data = {
+    "name": "Production",
+    "description": "Production environment project",
+    "settings": {
+        "max_tokens": 4096
+    }
+}
+
+response = requests.post(
+    "http://localhost:3002/projects",
+    json=data
+)
+project = response.json()
+```
+</CodeGroup>
+
+<ParamField body="name" type="string" required>
+  Project name
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional project description
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Project-specific settings as JSON object
+</ParamField>
+
+<ResponseField name="project" type="object">
+  The created project object (see List Projects for structure)
+</ResponseField>
+
+## Get Project
+
+Retrieve a specific project by ID.
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:3002/projects/{id}
+```
+
+```python Python
+import requests
+
+project_id = "550e8400-e29b-41d4-a716-446655440000"
+response = requests.get(f"http://localhost:3002/projects/{project_id}")
+project = response.json()
+```
+</CodeGroup>
+
+<ParamField path="id" type="uuid" required>
+  The project ID
+</ParamField>
+
+<ResponseField name="project" type="object">
+  The project object (see List Projects for structure)
+</ResponseField>
+
+## Update Project
+
+Update an existing project's details.
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:3002/projects/{id} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Project Name",
+    "description": "Updated description",
+    "is_default": true
+  }'
+```
+
+```python Python
+import requests
+
+project_id = "550e8400-e29b-41d4-a716-446655440000"
+data = {
+    "name": "Updated Project Name",
+    "description": "Updated description",
+    "is_default": True
+}
+
+response = requests.put(
+    f"http://localhost:3002/projects/{project_id}",
+    json=data
+)
+project = response.json()
+```
+</CodeGroup>
+
+<ParamField path="id" type="uuid" required>
+  The project ID
+</ParamField>
+
+<ParamField body="name" type="string">
+  New project name
+</ParamField>
+
+<ParamField body="description" type="string">
+  New project description
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Updated project settings
+</ParamField>
+
+<ParamField body="is_default" type="boolean">
+  Set as default project
+</ParamField>
+
+<ResponseField name="project" type="object">
+  The updated project object
+</ResponseField>
+
+## Delete Project
+
+Delete a project permanently.
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:3002/projects/{id}
+```
+
+```python Python
+import requests
+
+project_id = "550e8400-e29b-41d4-a716-446655440000"
+response = requests.delete(f"http://localhost:3002/projects/{project_id}")
+```
+</CodeGroup>
+
+<ParamField path="id" type="uuid" required>
+  The project ID to delete
+</ParamField>
+
+<ResponseField name="message" type="string">
+  Confirmation message: "Project deleted successfully"
+</ResponseField>
+
+## Set Default Project
+
+Mark a project as the default project.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3002/projects/{id}/default
+```
+
+```python Python
+import requests
+
+project_id = "550e8400-e29b-41d4-a716-446655440000"
+response = requests.post(f"http://localhost:3002/projects/{project_id}/default")
+project = response.json()
+```
+</CodeGroup>
+
+<ParamField path="id" type="uuid" required>
+  The project ID to set as default
+</ParamField>
+
+<ResponseField name="project" type="object">
+  The updated project object with is_default set to true
+</ResponseField>

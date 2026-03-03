@@ -1,0 +1,373 @@
+---
+title: OpenAI SDK Integration
+description: Use vLLora with the official OpenAI Python SDK for real-time tracing and debugging
+---
+
+vLLora is fully compatible with the official OpenAI Python SDK. Simply configure the SDK to use vLLora's base URL to automatically capture traces, monitor performance, and debug your AI applications in real-time.
+
+## Quick Start
+
+Redirect OpenAI SDK requests to vLLora by setting the `base_url` parameter:
+
+```python
+from openai import OpenAI
+
+# Point OpenAI SDK to vLLora gateway
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+# Use as normal - vLLora traces all requests
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "user", "content": "What is the capital of France?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Installation
+
+Install the OpenAI Python SDK:
+
+```bash
+pip install openai
+```
+
+Start vLLora:
+
+```bash
+vllora
+```
+
+## Configuration
+
+### Basic Setup
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### Using Environment Variables
+
+```python
+import os
+from openai import OpenAI
+
+os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
+os.environ["OPENAI_BASE_URL"] = "http://localhost:9090/v1"
+
+client = OpenAI()  # Automatically uses environment variables
+```
+
+### Streaming Responses
+
+vLLora fully supports streaming responses:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+stream = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Count to 10"}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+```
+
+## Function Calling
+
+vLLora automatically traces function/tool calls:
+
+```python
+from openai import OpenAI
+import json
+
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"]
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    }
+]
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "What's the weather in Boston?"}],
+    tools=tools,
+    tool_choice="auto"
+)
+
+# Check if function was called
+if response.choices[0].message.tool_calls:
+    tool_call = response.choices[0].message.tool_calls[0]
+    print(f"Function called: {tool_call.function.name}")
+    print(f"Arguments: {tool_call.function.arguments}")
+```
+
+## Async Support
+
+vLLora supports the async OpenAI client:
+
+```python
+import asyncio
+from openai import AsyncOpenAI
+
+async def main():
+    client = AsyncOpenAI(
+        api_key="your-openai-api-key",
+        base_url="http://localhost:9090/v1"
+    )
+    
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "Hello!"}]
+    )
+    
+    print(response.choices[0].message.content)
+
+asyncio.run(main())
+```
+
+### Async Streaming
+
+```python
+import asyncio
+from openai import AsyncOpenAI
+
+async def main():
+    client = AsyncOpenAI(
+        api_key="your-openai-api-key",
+        base_url="http://localhost:9090/v1"
+    )
+    
+    stream = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "Write a haiku"}],
+        stream=True
+    )
+    
+    async for chunk in stream:
+        if chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
+
+asyncio.run(main())
+```
+
+## Multi-Provider Support
+
+vLLora can route requests to different AI providers. Configure providers in the vLLora UI and use the appropriate model name:
+
+```python
+from openai import OpenAI
+
+# Configure client once
+client = OpenAI(
+    api_key="your-api-key",  # Configure in vLLora UI
+    base_url="http://localhost:9090/v1"
+)
+
+# OpenAI models
+openai_response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello from OpenAI"}]
+)
+
+# Anthropic Claude (via vLLora)
+anthropic_response = client.chat.completions.create(
+    model="claude-opus-4-5-20251101",
+    messages=[{"role": "user", "content": "Hello from Claude"}]
+)
+
+# Google Gemini (via vLLora)
+gemini_response = client.chat.completions.create(
+    model="gemini-2.0-flash-exp",
+    messages=[{"role": "user", "content": "Hello from Gemini"}]
+)
+```
+
+## Vision API
+
+vLLora supports vision models:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.jpg"}
+                }
+            ]
+        }
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+## Embeddings
+
+Generate embeddings through vLLora:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+response = client.embeddings.create(
+    model="text-embedding-3-small",
+    input="Your text to embed"
+)
+
+embedding = response.data[0].embedding
+print(f"Embedding dimension: {len(embedding)}")
+```
+
+## Viewing Traces
+
+All OpenAI SDK requests are automatically traced:
+
+1. Open vLLora UI at `http://localhost:9091`
+2. Navigate to **Traces**
+3. View detailed information:
+   - Request/response payloads
+   - Token usage and costs
+   - Latency metrics
+   - Function/tool calls
+   - Error details
+
+## Testing the Integration
+
+Quick test to verify vLLora integration:
+
+```python
+from openai import OpenAI
+
+def test_vllora_integration():
+    client = OpenAI(
+        api_key="your-openai-api-key",
+        base_url="http://localhost:9090/v1"
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "Test message"}],
+            max_tokens=10
+        )
+        print("✓ vLLora integration working")
+        print(f"Response: {response.choices[0].message.content}")
+        print("\nCheck traces at http://localhost:9091")
+    except Exception as e:
+        print(f"✗ Integration failed: {e}")
+
+test_vllora_integration()
+```
+
+## Benefits
+
+- **Drop-in Replacement**: Works with existing OpenAI SDK code
+- **Real-time Monitoring**: See all requests in the vLLora UI
+- **Debug Tool Calls**: Inspect function calling behavior
+- **Performance Tracking**: Monitor latency and token usage
+- **Multi-Provider**: Switch between AI providers seamlessly
+- **Cost Analysis**: Track spending across providers
+
+## Troubleshooting
+
+### Connection Errors
+
+Verify vLLora is running:
+
+```bash
+curl http://localhost:9090/health
+```
+
+### API Key Issues
+
+Configure API keys in vLLora UI at `http://localhost:9091` or ensure environment variables are accessible to vLLora.
+
+### Custom Port
+
+If vLLora runs on a different port:
+
+```python
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="http://localhost:YOUR_PORT/v1"
+)
+```
+
+### SSL/TLS
+
+For production deployments with HTTPS:
+
+```python
+client = OpenAI(
+    api_key="your-openai-api-key",
+    base_url="https://your-vllora-domain.com/v1"
+)
+```
+
+## Next Steps
+
+- Explore [LangChain Integration](/integration/langchain)
+- Learn about [Advanced Tracing](/features/tracing)
+- Configure [Custom Providers](/configuration/providers)

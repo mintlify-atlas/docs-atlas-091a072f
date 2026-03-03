@@ -1,0 +1,385 @@
+---
+title: Image Generation
+description: POST /v1/images/generations - Generate images from text prompts
+---
+
+Create images from text descriptions using state-of-the-art image generation models.
+
+## Endpoint
+
+```
+POST /v1/images/generations
+```
+
+## Request Body
+
+<ParamField body="prompt" type="string" required>
+  Text description of the desired image(s). The more detailed and specific, the better the results.
+  
+  Example: `"A serene mountain landscape at sunset with snow-capped peaks reflecting in a crystal clear lake"`
+</ParamField>
+
+<ParamField body="model" type="string" required>
+  The image generation model to use. Can be:
+  - Model name: `dall-e-3`
+  - Provider/model: `openai/dall-e-3`
+  
+  Supported models:
+  - OpenAI: `dall-e-2`, `dall-e-3`
+  - Stability AI: `stable-diffusion-xl-1024-v1-0`
+  - And more...
+</ParamField>
+
+<ParamField body="n" type="integer">
+  Number of images to generate. 
+  
+  - For `dall-e-3`: Must be 1 (default)
+  - For `dall-e-2`: Can be 1-10
+  
+  Default: 1
+</ParamField>
+
+<ParamField body="quality" type="string">
+  Quality of the generated image. Options:
+  - `"standard"`: Standard quality (faster, lower cost)
+  - `"hd"`: High definition quality (slower, higher cost)
+  
+  Only supported by `dall-e-3`.
+  Default: `"standard"`
+</ParamField>
+
+<ParamField body="response_format" type="string">
+  Format of the generated image data. Options:
+  - `"url"`: Returns a URL to download the image (expires after 1 hour)
+  - `"b64_json"`: Returns base64-encoded JSON
+  
+  Default: `"url"`
+</ParamField>
+
+<ParamField body="size" type="string">
+  Size of the generated image. Options depend on the model:
+  
+  **DALL-E 3:**
+  - `"1024x1024"` (default)
+  - `"1792x1024"` (landscape)
+  - `"1024x1792"` (portrait)
+  
+  **DALL-E 2:**
+  - `"256x256"`
+  - `"512x512"`
+  - `"1024x1024"` (default)
+  
+  **Custom sizes:**
+  Some models support custom dimensions like `"1536x1024"`
+</ParamField>
+
+<ParamField body="style" type="string">
+  Style of the generated image (DALL-E 3 only). Options:
+  - `"vivid"`: Hyper-real and dramatic images
+  - `"natural"`: More natural, less hyper-real images
+  
+  Default: `"vivid"`
+</ParamField>
+
+<ParamField body="user" type="string">
+  Unique identifier for the end-user, useful for monitoring and abuse detection.
+</ParamField>
+
+<ParamField body="moderation" type="string">
+  Content moderation level. Options:
+  - `"auto"` (default): Automatic moderation
+  - `"low"`: Minimal moderation
+  
+  Default: `"auto"`
+</ParamField>
+
+## Response
+
+<ResponseField name="created" type="integer">
+  Unix timestamp of when the images were created.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of generated image objects.
+  
+  Each image contains:
+  - `url` (string, optional): URL to download the image (when `response_format` is `"url"`)
+  - `b64_json` (string, optional): Base64-encoded image data (when `response_format` is `"b64_json"`)
+  - `revised_prompt` (string, optional): The revised prompt used to generate the image (DALL-E 3 may revise prompts for safety/quality)
+</ResponseField>
+
+## Examples
+
+### Basic Image Generation
+
+```bash
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "A cute baby sea otter wearing a tiny chef hat, preparing sushi",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+Response:
+
+```json
+{
+  "created": 1710345600,
+  "data": [
+    {
+      "url": "https://example.com/generated-image-123.png",
+      "revised_prompt": "A charming baby sea otter donning a miniature chef's hat, skillfully preparing sushi with its tiny paws"
+    }
+  ]
+}
+```
+
+### High Quality Landscape
+
+```bash
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "A futuristic cyberpunk cityscape at night with neon lights reflecting off rain-slicked streets",
+    "quality": "hd",
+    "size": "1792x1024",
+    "style": "vivid"
+  }'
+```
+
+### Natural Style Portrait
+
+```bash
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "Professional portrait photograph of a senior software engineer in a modern office",
+    "size": "1024x1792",
+    "style": "natural",
+    "quality": "hd"
+  }'
+```
+
+### Multiple Images (DALL-E 2)
+
+```bash
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-2",
+    "prompt": "Minimalist logo design for a tech startup",
+    "n": 4,
+    "size": "512x512"
+  }'
+```
+
+Response:
+
+```json
+{
+  "created": 1710345600,
+  "data": [
+    {
+      "url": "https://example.com/image-1.png"
+    },
+    {
+      "url": "https://example.com/image-2.png"
+    },
+    {
+      "url": "https://example.com/image-3.png"
+    },
+    {
+      "url": "https://example.com/image-4.png"
+    }
+  ]
+}
+```
+
+### Base64 Response Format
+
+```bash
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "Abstract geometric pattern in blue and gold",
+    "response_format": "b64_json",
+    "size": "1024x1024"
+  }'
+```
+
+Response:
+
+```json
+{
+  "created": 1710345600,
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "revised_prompt": "An abstract geometric pattern featuring shapes in shades of blue and gold"
+    }
+  ]
+}
+```
+
+### Using Different Providers
+
+```bash
+# OpenAI DALL-E 3
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "openai/dall-e-3",
+    "prompt": "A magical forest with glowing mushrooms"
+  }'
+
+# Stability AI
+curl -X POST https://your-gateway-url/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "stability/stable-diffusion-xl-1024-v1-0",
+    "prompt": "A magical forest with glowing mushrooms"
+  }'
+```
+
+## Best Practices
+
+### Writing Effective Prompts
+
+**Be specific and descriptive:**
+```json
+{
+  "prompt": "A golden retriever puppy playing in autumn leaves, professional photography, warm lighting, shallow depth of field"
+}
+```
+
+**Include style and mood:**
+```json
+{
+  "prompt": "Minimalist product photo of a ceramic coffee mug on a wooden table, Scandinavian design, soft natural lighting"
+}
+```
+
+**Specify composition:**
+```json
+{
+  "prompt": "Wide-angle shot of a mountain landscape, dramatic clouds, golden hour lighting, rule of thirds composition"
+}
+```
+
+### Handling Revised Prompts
+
+DALL-E 3 may revise prompts for safety and quality. Always check the `revised_prompt` field:
+
+```javascript
+const response = await createImage({
+  model: "dall-e-3",
+  prompt: "A cat"
+});
+
+console.log("Original:", "A cat");
+console.log("Revised:", response.data[0].revised_prompt);
+// Revised: "A domestic cat with soft fur, sitting peacefully..."
+```
+
+### Image URL Expiration
+
+Image URLs expire after 1 hour. Download and store images immediately:
+
+```javascript
+const response = await createImage({...});
+const imageUrl = response.data[0].url;
+
+// Download immediately
+const imageBuffer = await fetch(imageUrl).then(r => r.buffer());
+await saveToStorage(imageBuffer);
+```
+
+### Using Base64 for Immediate Use
+
+For direct embedding in HTML/JSON, use `b64_json` format:
+
+```javascript
+const response = await createImage({
+  model: "dall-e-3",
+  prompt: "Company logo",
+  response_format: "b64_json"
+});
+
+const base64 = response.data[0].b64_json;
+const dataUrl = `data:image/png;base64,${base64}`;
+
+// Use directly in HTML
+img.src = dataUrl;
+```
+
+## Content Moderation
+
+All generated images are subject to content moderation policies. Prompts that violate content policies will be rejected with an error.
+
+Rejected prompts typically include:
+- Violence or graphic content
+- Sexual or explicit content
+- Hateful or discriminatory content
+- Illegal activities
+- Copyrighted characters or trademarked content
+
+## Pricing
+
+Image generation costs vary by:
+- Model used
+- Image size
+- Quality setting
+- Number of images
+
+**Example pricing (OpenAI):**
+- DALL-E 3 Standard (1024x1024): $0.040 per image
+- DALL-E 3 HD (1024x1024): $0.080 per image
+- DALL-E 2 (1024x1024): $0.020 per image
+
+## Error Handling
+
+Common errors:
+
+```json
+{
+  "error": {
+    "message": "Your request was rejected due to content policy violations",
+    "type": "invalid_request_error",
+    "code": "content_policy_violation"
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "message": "Invalid size for dall-e-3: must be 1024x1024, 1792x1024, or 1024x1792",
+    "type": "invalid_request_error",
+    "code": "invalid_size"
+  }
+}
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Learn about the Gateway API
+  </Card>
+  <Card title="Chat Completions" icon="comments" href="/api/chat-completions">
+    Generate conversational responses
+  </Card>
+</CardGroup>

@@ -1,0 +1,329 @@
+---
+title: Real-time tracing
+description: Monitor and debug AI agent interactions with comprehensive tracing capabilities
+---
+
+vLLora provides powerful real-time tracing capabilities built on OpenTelemetry, allowing you to monitor every interaction with your AI agents, understand their behavior, and debug issues as they happen.
+
+## Overview
+
+Every request that flows through vLLora is automatically traced and recorded, giving you complete visibility into:
+
+- **LLM calls** - Model invocations with prompts, responses, and metadata
+- **Tool executions** - Function calls and their results
+- **Agent workflows** - Multi-step agent reasoning and actions
+- **API operations** - HTTP requests and responses
+
+<CardGroup cols={2}>
+  <Card title="Live monitoring" icon="eye">
+    Watch traces appear in real-time as your agents interact with LLMs
+  </Card>
+  <Card title="Complete context" icon="list-tree">
+    See full conversation history, tool calls, and nested operations
+  </Card>
+  <Card title="Performance metrics" icon="gauge">
+    Track latency, token usage, and costs for every request
+  </Card>
+  <Card title="Export anywhere" icon="cloud-arrow-up">
+    Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+  </Card>
+</CardGroup>
+
+## How tracing works
+
+vLLora uses a multi-layer tracing architecture:
+
+### 1. Span creation
+
+Every operation creates a span with rich context:
+
+```rust
+// From core/src/telemetry/mod.rs
+pub enum OperationType {
+    Model,      // LLM API call
+    Tool,       // Function/tool execution
+    Agent,      // Agent reasoning step
+    Api,        // External API call
+}
+```
+
+Each span includes:
+- Operation type and name
+- Start and end timestamps
+- Input and output data
+- Metadata (model, provider, tokens, cost)
+- Parent-child relationships
+
+### 2. Real-time broadcasting
+
+Traces are broadcast to connected clients via Server-Sent Events (SSE):
+
+```bash
+curl -N http://localhost:9090/api/events/stream
+```
+
+The UI automatically connects to this stream and displays traces as they occur.
+
+### 3. Persistent storage
+
+All traces are stored in SQLite for historical analysis:
+
+```bash
+# Query traces from the CLI
+vllora traces list --limit 10
+vllora traces get --run-id <run-id>
+```
+
+### 4. OTLP export
+
+Traces can be exported to external observability platforms:
+
+```yaml
+# config.yaml
+otel:
+  endpoint: http://localhost:4317
+  protocol: grpc
+```
+
+## Trace structure
+
+### Run hierarchy
+
+Traces are organized into **runs**, which represent a single request lifecycle:
+
+```
+Run (root span)
+├── Model span (LLM call)
+│   ├── Tool span (function call)
+│   └── Tool span (another function)
+├── Model span (follow-up call)
+└── API span (external API)
+```
+
+### Span attributes
+
+Each span captures detailed attributes:
+
+<Tabs>
+  <Tab title="Model spans">
+    ```json
+    {
+      "operation_type": "model",
+      "model": "gpt-4o",
+      "provider": "openai",
+      "input_tokens": 150,
+      "output_tokens": 75,
+      "total_tokens": 225,
+      "cost": 0.00315,
+      "latency_ms": 1234
+    }
+    ```
+  </Tab>
+  <Tab title="Tool spans">
+    ```json
+    {
+      "operation_type": "tool",
+      "tool_name": "search_database",
+      "tool_args": {"query": "user preferences"},
+      "tool_result": {"count": 5, "items": [...]},
+      "latency_ms": 45
+    }
+    ```
+  </Tab>
+  <Tab title="Agent spans">
+    ```json
+    {
+      "operation_type": "agent",
+      "agent_name": "research_assistant",
+      "step": 3,
+      "reasoning": "Analyzing search results...",
+      "next_action": "summarize"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Viewing traces
+
+### Web UI
+
+The vLLora UI (http://localhost:9091) provides:
+
+- **Live trace stream** - See new traces as they arrive
+- **Trace timeline** - Visualize operation duration and nesting
+- **Span details** - Inspect inputs, outputs, and metadata
+- **Search and filtering** - Find traces by model, operation, time range
+
+### REST API
+
+Query traces programmatically:
+
+```bash
+# List recent traces
+curl http://localhost:9090/api/traces
+
+# Get spans for a specific run
+curl http://localhost:9090/api/runs/<run-id>/spans
+
+# Filter by operation type
+curl "http://localhost:9090/api/traces?operation_names=model,tool"
+```
+
+### CLI
+
+Query from the command line:
+
+```bash
+# List recent traces
+vllora traces list --limit 20
+
+# Show trace details
+vllora traces get --run-id abc123
+
+# Filter by time range
+vllora traces list --since "2024-01-01" --until "2024-01-31"
+```
+
+## Trace metadata
+
+### Thread tracking
+
+Group related requests into threads:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \
+  -H "X-Thread-ID: conversation-123" \
+  -d '{...}'
+```
+
+All traces with the same thread ID are linked together.
+
+### Custom labels
+
+Tag traces for easier filtering:
+
+```bash
+curl http://localhost:9090/v1/chat/completions \
+  -H "X-Labels: env=prod,user=alice,feature=search" \
+  -d '{...}'
+```
+
+### Run metadata
+
+Add custom metadata to runs:
+
+```json
+{
+  "model": "gpt-4o",
+  "messages": [...],
+  "extra": {
+    "metadata": {
+      "user_id": "user_123",
+      "session_id": "session_456",
+      "experiment": "variant_a"
+    }
+  }
+}
+```
+
+## Performance monitoring
+
+### Token usage
+
+Track token consumption across all requests:
+
+```bash
+curl "http://localhost:9090/api/runs?start_time=2024-01-01T00:00:00Z"
+```
+
+Response includes aggregated metrics:
+
+```json
+{
+  "total_runs": 150,
+  "total_input_tokens": 45000,
+  "total_output_tokens": 22500,
+  "total_cost": 1.23
+}
+```
+
+### Latency tracking
+
+Every span includes timing information:
+
+- `start_time` - When the operation started
+- `end_time` - When it completed
+- `duration_ms` - Total duration in milliseconds
+
+Use this to identify slow operations and optimize performance.
+
+## Integration with external tools
+
+### Jaeger
+
+Export traces to Jaeger for distributed tracing:
+
+```yaml
+# config.yaml
+otel:
+  endpoint: http://jaeger:4317
+  protocol: grpc
+```
+
+View traces in the Jaeger UI with full context propagation.
+
+### Grafana Tempo
+
+Send traces to Tempo for long-term storage:
+
+```yaml
+otel:
+  endpoint: http://tempo:4317
+  protocol: grpc
+```
+
+### Prometheus
+
+Export metrics derived from traces:
+
+- Request count by model and provider
+- Token usage over time
+- Error rates
+- Latency percentiles
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use thread IDs for conversations">
+    Set `X-Thread-ID` header to group related requests together. This makes it easier to track multi-turn conversations and agent workflows.
+  </Accordion>
+
+  <Accordion title="Add meaningful labels">
+    Use the `X-Labels` header to tag traces with environment, user, feature, or experiment information. This enables powerful filtering and analysis.
+  </Accordion>
+
+  <Accordion title="Monitor token usage">
+    Regularly check token consumption to avoid unexpected costs. Use the `/api/runs` endpoint with time-based filtering.
+  </Accordion>
+
+  <Accordion title="Set up OTLP export for production">
+    Export traces to a dedicated observability platform (Jaeger, Tempo, Datadog) for production deployments. SQLite storage is great for development but limited for scale.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Debugging" icon="bug" href="/features/debugging">
+    Learn about interactive debugging with breakpoints
+  </Card>
+  <Card title="Monitoring guide" icon="chart-line" href="/guides/monitoring">
+    Set up comprehensive monitoring and alerting
+  </Card>
+  <Card title="Traces API" icon="code" href="/api/traces">
+    Explore the traces REST API
+  </Card>
+  <Card title="Runs API" icon="play" href="/api/runs">
+    Query run metadata and metrics
+  </Card>
+</CardGroup>

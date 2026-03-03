@@ -1,0 +1,244 @@
+---
+title: LangChain Integration
+description: Integrate vLLora with LangChain to trace and debug your AI agents in real-time
+---
+
+vLLora seamlessly integrates with LangChain through its OpenAI-compatible API. By configuring LangChain to use vLLora as the base URL, you automatically gain real-time tracing, debugging, and monitoring capabilities for all your LangChain agents.
+
+## Quick Start
+
+Redirect your LangChain requests to vLLora by setting the `base_url` parameter when initializing the chat model:
+
+```python
+from langchain_openai import ChatOpenAI
+
+# Point LangChain to vLLora gateway
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+# Use as normal - vLLora will trace all requests
+response = llm.invoke("What is the capital of France?")
+print(response.content)
+```
+
+## Configuration
+
+### Basic Setup
+
+1. **Start vLLora**:
+   ```bash
+   vllora
+   ```
+   The gateway runs on `http://localhost:9090` by default.
+
+2. **Configure API Keys**: Visit `http://localhost:9091` to set up your provider API keys through the UI.
+
+3. **Update LangChain Client**:
+   ```python
+   from langchain_openai import ChatOpenAI
+   
+   llm = ChatOpenAI(
+       model="gpt-4o-mini",
+       openai_api_key="your-openai-api-key",
+       base_url="http://localhost:9090/v1"
+   )
+   ```
+
+### Advanced Configuration
+
+#### Using Environment Variables
+
+```python
+import os
+from langchain_openai import ChatOpenAI
+
+os.environ["OPENAI_API_BASE"] = "http://localhost:9090/v1"
+os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+```
+
+#### Streaming Responses
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
+
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1",
+    streaming=True
+)
+
+# Stream responses
+for chunk in llm.stream([HumanMessage(content="Count to 10")]):
+    print(chunk.content, end="", flush=True)
+```
+
+## LangChain Agents
+
+vLLora automatically traces all agent interactions, including tool calls and multi-step reasoning:
+
+```python
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
+
+# Define a simple tool
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"The weather in {city} is sunny and 72°F"
+
+# Configure LLM with vLLora
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+# Create agent prompt
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant"),
+    ("user", "{input}"),
+    MessagesPlaceholder(variable_name="agent_scratchpad"),
+])
+
+# Create and run agent
+tools = [get_weather]
+agent = create_openai_functions_agent(llm, tools, prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+result = agent_executor.invoke({
+    "input": "What's the weather like in San Francisco?"
+})
+print(result["output"])
+```
+
+## LangChain Expression Language (LCEL)
+
+vLLora traces entire LCEL chains automatically:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant that translates {input_language} to {output_language}."),
+    ("user", "{text}")
+])
+
+output_parser = StrOutputParser()
+
+# Create chain - vLLora traces the entire pipeline
+chain = prompt | llm | output_parser
+
+result = chain.invoke({
+    "input_language": "English",
+    "output_language": "French",
+    "text": "Hello, how are you?"
+})
+print(result)
+```
+
+## Multi-Provider Support
+
+vLLora supports routing to different AI providers. Configure the provider through the vLLora UI and use the appropriate model name:
+
+```python
+from langchain_openai import ChatOpenAI
+
+# OpenAI
+openai_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:9090/v1"
+)
+
+# Anthropic (through vLLora)
+anthropic_llm = ChatOpenAI(
+    model="claude-opus-4-5-20251101",
+    openai_api_key="your-anthropic-api-key",  # Configure in vLLora UI
+    base_url="http://localhost:9090/v1"
+)
+
+# Google Gemini (through vLLora)
+gemini_llm = ChatOpenAI(
+    model="gemini-2.0-flash-exp",
+    openai_api_key="your-gemini-api-key",  # Configure in vLLora UI
+    base_url="http://localhost:9090/v1"
+)
+```
+
+## Viewing Traces
+
+After running your LangChain application:
+
+1. Open the vLLora UI at `http://localhost:9091`
+2. Navigate to the **Traces** section
+3. View real-time traces showing:
+   - Complete conversation history
+   - Tool calls and responses
+   - Agent reasoning steps
+   - Token usage and costs
+   - Performance metrics
+
+## Benefits
+
+- **Zero Code Changes**: Use existing LangChain code, just update the `base_url`
+- **Real-time Debugging**: See agent interactions as they happen
+- **Tool Tracing**: Monitor all tool calls and their results
+- **Multi-Agent Support**: Trace complex multi-agent workflows
+- **Performance Monitoring**: Track latency, token usage, and costs
+- **Error Detection**: Quickly identify and debug failures
+
+## Troubleshooting
+
+### Connection Issues
+
+If LangChain can't connect to vLLora:
+
+```python
+import requests
+
+# Test vLLora connectivity
+try:
+    response = requests.get("http://localhost:9090/health")
+    print(f"vLLora status: {response.status_code}")
+except Exception as e:
+    print(f"Cannot connect to vLLora: {e}")
+```
+
+### API Key Configuration
+
+Ensure your API keys are configured in the vLLora UI (`http://localhost:9091`) or set through environment variables that vLLora can access.
+
+### Custom vLLora Port
+
+If running vLLora on a custom port:
+
+```python
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key="your-openai-api-key",
+    base_url="http://localhost:YOUR_PORT/v1"
+)
+```
+
+## Next Steps
+
+- Learn about [OpenAI SDK integration](/integration/openai-sdk)
+- Explore [Advanced Tracing](/features/tracing)
+- Configure [Multiple Providers](/configuration/providers)

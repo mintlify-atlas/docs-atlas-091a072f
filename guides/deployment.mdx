@@ -1,0 +1,294 @@
+---
+title: 'Deployment Guide'
+description: 'Learn how to deploy and self-host vLLora in production'
+---
+
+## Overview
+
+vLLora is designed to be self-hosted and can be deployed in various environments. This guide covers deployment options, configuration, and best practices for running vLLora in production.
+
+## Installation Methods
+
+### Homebrew (macOS/Linux)
+
+The easiest way to install vLLora:
+
+```bash
+brew tap vllora/vllora
+brew install vllora
+```
+
+### From Source
+
+For development or custom builds:
+
+```bash
+git clone https://github.com/vllora/vllora.git
+cd vllora
+cargo build --release
+```
+
+The binary will be available at `target/release/vllora`.
+
+## Starting vLLora
+
+### Basic Usage
+
+Start vLLora with default settings:
+
+```bash
+vllora
+```
+
+This will start:
+- **HTTP API Server**: `http://0.0.0.0:9090`
+- **UI Server**: `http://0.0.0.0:9091`
+- **OTEL Collector**: `http://[::]:4317`
+- **Distri Server**: `http://0.0.0.0:8081`
+
+### Using Custom Configuration
+
+Start with a custom config file:
+
+```bash
+vllora --config /path/to/config.yaml
+```
+
+The default config file location is `config.yaml` in the current directory.
+
+## Command Line Options
+
+vLLora supports the following CLI arguments that override configuration file settings:
+
+### Host and Port Configuration
+
+```bash
+vllora --host 127.0.0.1 --port 8080
+```
+
+**Options:**
+- `--host <ADDRESS>` - Host address to bind to (e.g., `127.0.0.1` for local or `0.0.0.0` for all interfaces)
+- `--port <PORT>` - API server port (default: `9090`)
+- `--ui-port <UI_PORT>` - UI server port (default: `9091`)
+- `--distri-port <DISTRI_PORT>` - Distri server port (default: `8081`)
+- `--otel-port <OTEL_PORT>` - OTLP metrics port (default: `4317`)
+
+### CORS Configuration
+
+```bash
+vllora --cors-origins "http://localhost:3000,https://example.com"
+```
+
+Specify comma-separated list of allowed CORS origins.
+
+### UI Configuration
+
+```bash
+vllora --open-ui-on-startup false
+```
+
+Disable automatic browser opening on startup.
+
+## Production Deployment
+
+### Environment Variables
+
+vLLora respects the following environment variables:
+
+**Logging:**
+```bash
+export RUST_LOG=info  # Log level: trace, debug, info, warn, error
+export ANSI_OUTPUT=true  # Enable colored output
+```
+
+**Database:**
+```bash
+export HOME=/path/to/home  # vLLora stores data in ~/.vllora/
+```
+
+**LangDB API:**
+```bash
+export LANGDB_API_URL=https://langdb.ai/v1  # Custom LangDB API endpoint
+```
+
+### File System Layout
+
+vLLora stores data in the following locations:
+
+```
+~/.vllora/
+└── vllora.db  # SQLite database for metadata, traces, and metrics
+```
+
+### Running as a Service
+
+#### systemd (Linux)
+
+Create `/etc/systemd/system/vllora.service`:
+
+```ini
+[Unit]
+Description=vLLora AI Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=vllora
+WorkingDirectory=/opt/vllora
+ExecStart=/usr/local/bin/vllora --config /etc/vllora/config.yaml
+Restart=always
+RestartSec=10
+
+# Environment
+Environment="RUST_LOG=info"
+Environment="HOME=/var/lib/vllora"
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vllora
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable vllora
+sudo systemctl start vllora
+sudo systemctl status vllora
+```
+
+#### Docker (Coming Soon)
+
+Docker support is planned for future releases. For now, you can build from source and containerize manually.
+
+### Network Configuration
+
+#### Reverse Proxy with nginx
+
+```nginx
+upstream vllora_api {
+    server 127.0.0.1:9090;
+}
+
+upstream vllora_ui {
+    server 127.0.0.1:9091;
+}
+
+server {
+    listen 80;
+    server_name api.yourdomain.com;
+
+    location / {
+        proxy_pass http://vllora_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name ui.yourdomain.com;
+
+    location / {
+        proxy_pass http://vllora_ui;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support for real-time features
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### Firewall Configuration
+
+Ensure the following ports are accessible:
+
+- `9090` - HTTP API (required)
+- `9091` - UI Server (optional, can be restricted)
+- `4317` - OTLP Collector (internal, can be restricted)
+- `8081` - Distri Server (optional, for AI agent features)
+
+## High Availability
+
+### Database Considerations
+
+vLLora uses SQLite for local storage. For production deployments:
+
+1. **Regular Backups**: Set up automated backups of `~/.vllora/vllora.db`
+2. **Volume Mounting**: If containerized, mount persistent volumes for `/var/lib/vllora`
+3. **Connection Pool**: vLLora uses a connection pool size of 10 by default
+
+### Scaling Considerations
+
+vLLora is designed for single-instance deployment. For high-traffic scenarios:
+
+- Use a load balancer with sticky sessions
+- Consider horizontal scaling (multiple instances with separate databases)
+- Monitor database size and implement cleanup policies for old traces
+
+## Health Checks
+
+Monitor vLLora health using these endpoints:
+
+```bash
+# Check API availability
+curl http://localhost:9090/v1/models
+
+# Check UI availability  
+curl http://localhost:9091
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+If ports are already in use:
+
+```bash
+vllora --port 8080 --ui-port 8081
+```
+
+### Database Locked Errors
+
+If you see database locked errors:
+
+1. Ensure only one vLLora instance is running
+2. Check file permissions on `~/.vllora/`
+3. Verify no other processes are accessing the database
+
+### Permission Denied
+
+Ensure the user running vLLora has:
+
+- Write permissions to `$HOME/.vllora/`
+- Permission to bind to the configured ports (use ports >1024 for non-root)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Learn about advanced configuration options
+  </Card>
+  <Card title="API Keys" icon="key" href="/guides/api-keys">
+    Configure provider API keys
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Set up monitoring and observability
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the REST API
+  </Card>
+</CardGroup>

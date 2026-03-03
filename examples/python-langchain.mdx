@@ -1,0 +1,228 @@
+---
+title: 'Python LangChain Integration'
+description: 'Integrate vLLora with LangChain for powerful AI applications'
+---
+
+# Python LangChain Integration
+
+This example shows how to use vLLora with LangChain to build AI-powered applications with streaming support.
+
+## Installation
+
+Install the required packages:
+
+```bash
+pip install vllora langchain langchain-openai
+```
+
+## Basic LangChain Integration
+
+Use vLLora as a drop-in replacement for OpenAI in LangChain:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import os
+
+# Configure vLLora endpoint
+os.environ["OPENAI_API_KEY"] = os.getenv("VLLORA_API_KEY")
+os.environ["OPENAI_API_BASE"] = "https://api.vllora.ai/v1"
+
+# Create LangChain chat model with vLLora
+chat = ChatOpenAI(
+    model="gpt-4.1-mini",
+    temperature=0.7,
+    streaming=True,
+    base_url="https://api.vllora.ai/v1"
+)
+
+# Send a simple message
+messages = [
+    SystemMessage(content="You are a helpful AI assistant."),
+    HumanMessage(content="Explain quantum computing in simple terms.")
+]
+
+response = chat.invoke(messages)
+print(response.content)
+```
+
+## Streaming Responses
+
+Get real-time streaming responses from vLLora:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+
+# Create chat model with streaming callback
+chat = ChatOpenAI(
+    model="gpt-4.1-mini",
+    base_url="https://api.vllora.ai/v1",
+    streaming=True,
+    callbacks=[StreamingStdOutCallbackHandler()]
+)
+
+# Stream the response
+messages = [HumanMessage(content="Count from 1 to 10 slowly.")]
+response = chat.invoke(messages)
+```
+
+## Building a Conversational Chain
+
+Create a conversational AI with memory:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferMemory
+
+# Initialize vLLora chat model
+llm = ChatOpenAI(
+    model="gpt-4.1-mini",
+    base_url="https://api.vllora.ai/v1",
+    temperature=0.7
+)
+
+# Create conversation chain with memory
+conversation = ConversationChain(
+    llm=llm,
+    memory=ConversationBufferMemory(),
+    verbose=True
+)
+
+# Have a conversation
+print(conversation.predict(input="Hi, my name is Alice."))
+print(conversation.predict(input="What's my name?"))
+print(conversation.predict(input="Tell me a joke about programming."))
+```
+
+## Using Multiple Providers
+
+Switch between different AI providers seamlessly:
+
+```python
+import os
+from langchain_openai import ChatOpenAI
+
+def create_vllora_chat(provider="openai", model=None):
+    """Create a LangChain chat model with vLLora for different providers."""
+    
+    provider_configs = {
+        "openai": {
+            "model": model or "gpt-4.1-mini",
+            "api_key": os.getenv("VLLORA_OPENAI_API_KEY")
+        },
+        "anthropic": {
+            "model": model or "claude-opus-4-5-20251101",
+            "api_key": os.getenv("VLLORA_ANTHROPIC_API_KEY")
+        },
+        "bedrock": {
+            "model": model or "anthropic.claude-v3-5-sonnet",
+            "api_key": os.getenv("VLLORA_BEDROCK_API_KEY")
+        }
+    }
+    
+    config = provider_configs.get(provider)
+    if not config:
+        raise ValueError(f"Unknown provider: {provider}")
+    
+    return ChatOpenAI(
+        model=config["model"],
+        base_url="https://api.vllora.ai/v1",
+        api_key=config["api_key"],
+        temperature=0.7
+    )
+
+# Use different providers
+openai_chat = create_vllora_chat("openai")
+anthropic_chat = create_vllora_chat("anthropic")
+bedrock_chat = create_vllora_chat("bedrock")
+```
+
+## Advanced: RAG with vLLora
+
+Build a Retrieval-Augmented Generation system:
+
+```python
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.document_loaders import TextLoader
+
+# Load documents
+loader = TextLoader("your_documents.txt")
+documents = loader.load()
+
+# Split documents into chunks
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=200
+)
+texts = text_splitter.split_documents(documents)
+
+# Create embeddings and vector store
+embeddings = OpenAIEmbeddings(
+    base_url="https://api.vllora.ai/v1"
+)
+vectorstore = FAISS.from_documents(texts, embeddings)
+
+# Create QA chain with vLLora
+llm = ChatOpenAI(
+    model="gpt-4.1-mini",
+    base_url="https://api.vllora.ai/v1",
+    temperature=0
+)
+
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    retriever=vectorstore.as_retriever()
+)
+
+# Ask questions about your documents
+result = qa_chain.invoke({"query": "What are the main topics in this document?"})
+print(result["result"])
+```
+
+## Error Handling
+
+Handle errors gracefully:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+try:
+    chat = ChatOpenAI(
+        model="gpt-4.1-mini",
+        base_url="https://api.vllora.ai/v1",
+        max_retries=3,
+        request_timeout=30
+    )
+    
+    messages = [HumanMessage(content="Hello, vLLora!")]
+    response = chat.invoke(messages)
+    print(response.content)
+    
+except Exception as e:
+    logging.error(f"Error communicating with vLLora: {e}")
+    raise
+```
+
+## Key Benefits
+
+- **Drop-in Replacement**: Use vLLora with existing LangChain code
+- **Streaming Support**: Real-time responses for better UX
+- **Multi-Provider**: Access multiple AI providers through one API
+- **Production Ready**: Built-in retry logic and error handling
+
+## Next Steps
+
+- Explore [TypeScript examples](/examples/typescript-openai)
+- Learn about [Rust streaming](/examples/rust-streaming)
+- Check out [LangChain documentation](https://python.langchain.com/)

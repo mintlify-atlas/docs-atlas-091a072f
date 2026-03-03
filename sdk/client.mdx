@@ -1,0 +1,258 @@
+---
+title: 'VlloraLLMClient'
+description: 'Configure and use the VlloraLLMClient for LLM interactions'
+---
+
+The `VlloraLLMClient` is the main entry point for interacting with LLM providers. It provides a flexible builder pattern for configuration.
+
+## Creating a Client
+
+### Default Client
+
+Create a client with default settings (uses OpenAI):
+
+```rust
+use vllora_llm::client::VlloraLLMClient;
+
+let client = VlloraLLMClient::default();
+// or
+let client = VlloraLLMClient::new();
+```
+
+### Using the Builder
+
+For more control, use the builder pattern:
+
+```rust
+use vllora_llm::client::VlloraLLMClientBuilder;
+use vllora_llm::types::credentials::{Credentials, ApiKeyCredentials};
+use vllora_llm::types::provider::InferenceModelProvider;
+
+let client = VlloraLLMClientBuilder::new()
+    .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+        api_key: std::env::var("OPENAI_API_KEY").unwrap(),
+    }))
+    .with_model_provider(InferenceModelProvider::OpenAI)
+    .build();
+```
+
+## Configuration Options
+
+### Credentials
+
+The SDK supports multiple credential types:
+
+<Tabs>
+  <Tab title="API Key">
+```rust
+use vllora_llm::types::credentials::{Credentials, ApiKeyCredentials};
+
+let client = VlloraLLMClient::new()
+    .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+        api_key: "sk-...".to_string(),
+    }));
+```
+  </Tab>
+  <Tab title="AWS Bedrock">
+```rust
+use vllora_llm::types::credentials::{
+    Credentials, BedrockCredentials, AwsIAMCredentials
+};
+
+let client = VlloraLLMClient::new()
+    .with_credentials(Credentials::Aws(BedrockCredentials::IAM(
+        AwsIAMCredentials {
+            access_key: "AKIA...".to_string(),
+            access_secret: "...".to_string(),
+            region: Some("us-east-1".to_string()),
+        }
+    )));
+```
+  </Tab>
+  <Tab title="Custom Endpoint">
+```rust
+use vllora_llm::types::credentials::Credentials;
+
+let client = VlloraLLMClient::new()
+    .with_credentials(Credentials::ApiKeyWithEndpoint {
+        api_key: "sk-...".to_string(),
+        endpoint: "https://api.example.com".to_string(),
+    });
+```
+  </Tab>
+</Tabs>
+
+### Model Provider
+
+Specify which LLM provider to use:
+
+```rust
+use vllora_llm::types::provider::InferenceModelProvider;
+
+// OpenAI
+let client = VlloraLLMClient::new()
+    .with_model_provider(InferenceModelProvider::OpenAI);
+
+// Anthropic
+let client = VlloraLLMClient::new()
+    .with_model_provider(InferenceModelProvider::Anthropic);
+
+// Gemini
+let client = VlloraLLMClient::new()
+    .with_model_provider(InferenceModelProvider::Gemini);
+
+// Bedrock
+let client = VlloraLLMClient::new()
+    .with_model_provider(InferenceModelProvider::Bedrock);
+
+// Custom proxy
+let client = VlloraLLMClient::new()
+    .with_model_provider(InferenceModelProvider::Proxy("vllora".to_string()));
+```
+
+### Custom Inference Endpoint
+
+For custom or self-hosted endpoints:
+
+```rust
+let client = VlloraLLMClient::new()
+    .with_inference_endpoint("https://my-llm-proxy.com".to_string());
+```
+
+## Client Methods
+
+### `completions()`
+
+Returns a `CompletionsClient` for chat completion requests:
+
+```rust
+let completions = client.completions();
+let response = completions.create(request).await?;
+```
+
+See [Completions API](/sdk/completions) for details.
+
+### `responses()`
+
+Returns a `ResponsesClient` for advanced response handling:
+
+```rust
+let responses = client.responses();
+```
+
+## Complete Example
+
+Here's a complete example using Anthropic's Claude:
+
+```rust llm/examples/anthropic/src/main.rs
+use vllora_llm::async_openai::types::{
+    ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs,
+};
+use vllora_llm::client::VlloraLLMClient;
+use vllora_llm::error::LLMResult;
+use vllora_llm::types::credentials::{ApiKeyCredentials, Credentials};
+use vllora_llm::types::provider::InferenceModelProvider;
+
+#[tokio::main]
+async fn main() -> LLMResult<()> {
+    // Build request
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("claude-opus-4-5-20251101")
+        .messages([
+            ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a helpful assistant.")
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content("Hello!")
+                    .build()?,
+            ),
+        ])
+        .build()?;
+
+    // Configure client for Anthropic
+    let client = VlloraLLMClient::new()
+        .with_credentials(Credentials::ApiKey(ApiKeyCredentials {
+            api_key: std::env::var("VLLORA_ANTHROPIC_API_KEY")
+                .expect("VLLORA_ANTHROPIC_API_KEY must be set"),
+        }))
+        .with_model_provider(InferenceModelProvider::Anthropic);
+
+    // Send request
+    let response = client
+        .completions()
+        .create(request)
+        .await?;
+
+    if let Some(content) = &response.message().content {
+        if let Some(text) = content.as_string() {
+            println!("Response: {}", text);
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Builder Pattern Details
+
+### VlloraLLMClientBuilder
+
+The builder provides these methods:
+
+| Method | Description |
+|--------|-------------|
+| `new()` | Create a new builder |
+| `with_provider(InferenceProvider)` | Set the inference provider with full configuration |
+| `with_credentials(Credentials)` | Set authentication credentials |
+| `with_model_provider(InferenceModelProvider)` | Set the model provider type |
+| `with_inference_endpoint(String)` | Set a custom endpoint URL |
+| `build()` | Construct the final `VlloraLLMClient` |
+
+### Fluent Configuration
+
+You can also configure after creation:
+
+```rust
+let client = VlloraLLMClient::new()
+    .with_credentials(credentials)
+    .with_model_provider(InferenceModelProvider::OpenAI)
+    .with_inference_endpoint("https://api.openai.com/v1".to_string());
+```
+
+## Type Reference
+
+Key types defined in `llm/src/client/mod.rs`:
+
+```rust
+pub struct VlloraLLMClient {
+    params: VlloraLLMClientBuilderParams,
+}
+
+pub struct VlloraLLMClientBuilder {
+    params: VlloraLLMClientBuilderParams,
+}
+
+struct VlloraLLMClientBuilderParams {
+    provider: Option<InferenceProvider>,
+    credentials: Option<Credentials>,
+    model_provider: Option<InferenceModelProvider>,
+    inference_endpoint: Option<String>,
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Completions API" icon="message" href="/sdk/completions">
+    Learn how to send chat completion requests
+  </Card>
+  <Card title="Streaming" icon="stream" href="/sdk/streaming">
+    Stream responses in real-time
+  </Card>
+</CardGroup>

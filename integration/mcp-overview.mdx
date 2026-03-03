@@ -1,0 +1,137 @@
+---
+title: MCP Integration Overview
+description: Learn how vLLora integrates with the Model Context Protocol (MCP) to connect with external tools and data sources
+---
+
+## What is MCP?
+
+The Model Context Protocol (MCP) is a standardized protocol that enables LLM applications to connect with external tools, data sources, and services. vLLora provides comprehensive MCP support, allowing you to:
+
+- Connect to remote MCP servers via HTTP, SSE, or WebSocket
+- Execute tools from MCP servers in your LLM workflows
+- Filter and select specific tools from MCP servers
+- Pass custom headers and environment variables for authentication
+
+## Architecture
+
+vLLora's MCP integration is built across two main modules:
+
+### Core MCP (`core/src/mcp/`)
+
+Provides the built-in vLLora MCP server implementation that exposes:
+
+- **Tools**: Search traces, get LLM call details, analyze runs, and monitor system health
+- **Prompts**: Pre-built prompts for debugging errors, analyzing performance, and understanding workflows
+- **Resources**: Access to run overviews and trace data via resource URIs
+
+The vLLora MCP server helps you debug and analyze your LLM application telemetry.
+
+### LLM MCP Client (`llm/src/mcp/`)
+
+Provides the MCP client implementation for connecting to external MCP servers:
+
+- **Transport Layer**: Supports HTTP, SSE, and WebSocket transports
+- **Tool Discovery**: Automatically lists and filters available tools
+- **Tool Execution**: Executes tools with parameter validation
+- **Authentication**: Custom headers and environment variables
+
+## Transport Types
+
+vLLora supports multiple MCP transport protocols:
+
+| Transport | Use Case | Connection Type |
+|-----------|----------|----------------|
+| **SSE** | Server-Sent Events, streaming responses | Long-lived HTTP connection |
+| **HTTP** | Simple request/response | Standard HTTP requests |
+| **WebSocket** | Bidirectional streaming | WebSocket connection |
+| **In-Memory** | Built-in vLLora tools | Direct function calls |
+
+## Key Features
+
+### Tool Filtering
+
+Select specific tools from MCP servers using filters:
+
+```json
+{
+  "filter": {
+    "selected": [
+      { "name": "search_web" },
+      { "name": "get_weather", "description": "Custom description" }
+    ]
+  }
+}
+```
+
+Or use regex patterns:
+
+```json
+{
+  "filter": {
+    "selected": [
+      { "name": "search_.*" }
+    ]
+  }
+}
+```
+
+### Authentication
+
+Pass authentication headers to MCP servers:
+
+```json
+{
+  "type": "sse",
+  "server_url": "https://api.example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer YOUR_API_KEY"
+  }
+}
+```
+
+### Environment Variables
+
+Supply environment variables for MCP servers:
+
+```json
+{
+  "type": "http",
+  "server_url": "https://api.example.com/mcp",
+  "env": {
+    "API_KEY": "your-key",
+    "REGION": "us-west-2"
+  }
+}
+```
+
+## Use Cases
+
+### Debugging with vLLora MCP Server
+
+The built-in vLLora MCP server provides tools for:
+
+- **Search traces**: Find specific LLM calls, tool executions, or errors
+- **Analyze runs**: Get detailed breakdowns of agent runs with costs and performance
+- **Monitor health**: Track recent LLM and tool activity across your system
+- **Debug errors**: Access error breadcrumbs and detailed failure information
+
+### Extending LLM Capabilities
+
+Connect external MCP servers to give your LLMs access to:
+
+- Web search (via DeepWiki, Tavily, etc.)
+- Database queries
+- File system operations
+- API integrations
+- Custom business logic
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure MCP Servers" icon="gear" href="/integration/mcp-configuration">
+    Learn how to configure MCP servers in vLLora
+  </Card>
+  <Card title="Available MCP Servers" icon="server" href="/integration/mcp-servers">
+    Explore available MCP servers and examples
+  </Card>
+</CardGroup>
